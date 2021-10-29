@@ -19,11 +19,12 @@ int sum_mac_addr(uint8_t mac_addr[6]){
     return ret;
 }
 
-void init_probe_storage(struct probe_storage* ps){
+void init_probe_storage(struct probe_storage* ps, char ssid[32]){
     ps->next = NULL;
     ps->n_probes = 0;
     ps->probe_cap = 10000;
     ps->probe_times = malloc(sizeof(uint32_t)*ps->probe_cap);
+    memcpy(ps->ssid, ssid, 32);
 }
 
 struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
@@ -32,8 +33,9 @@ struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
     memcpy(new_entry->addr, mac_addr, 6);
     new_entry->next = NULL;
     new_entry->notes = NULL;
-    new_entry->probes = malloc(sizeof(struct probe_storage));
-    init_probe_storage(new_entry->probes);
+    new_entry->probes = NULL;
+    /*new_entry->probes = malloc(sizeof(struct probe_storage));*/
+    /*init_probe_storage(new_entry->probes);*/
 
     return new_entry;
 }
@@ -52,14 +54,17 @@ void insert_probe(struct probe_storage* ps){
 
 void insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32]){
     int idx = sum_mac_addr(mac_addr);
-    struct mac_addr** bucket;
+    struct mac_addr** bucket, * prev_bucket, * ready_bucket;
     struct probe_storage* ps;
     _Bool found_bucket = 0;
 
     bucket = &ph->buckets[idx];
 
     /* initialize bucket if not found */
-    if(!*bucket)*bucket = alloc_mac_addr_bucket(mac_addr);
+    if(!*bucket){
+        /*printf("no bucket found at idx %i, creating!\n", idx);*/
+        *bucket = alloc_mac_addr_bucket(mac_addr);
+    }
 
 #if 0
 lookup bucket, if not found, allocate with new specific mac
@@ -67,28 +72,45 @@ go through all buckets looking for mac
 if not found, alloc bucket
 #endif
 
-    for(; (*bucket)->next; *bucket = (*bucket)->next){
-        printf("bucket next: %p\n", (void*)(*bucket)->next);
-        if(!memcmp((*bucket)->addr, mac_addr, 6)){
+    /*for(; (*bucket)->next; *bucket = (*bucket)->next){*/
+    for(ready_bucket = *bucket; ready_bucket; ready_bucket = ready_bucket->next){
+    /*for(; (*bucket); *bucket = (*bucket)->next){*/
+        /*printf("bucket next: %p\n", (void*)(*bucket)->next);*/
+        /*if(!memcmp((*bucket)->addr, mac_addr, 6)){*/
+        if(!memcmp(ready_bucket->addr, mac_addr, 6)){
             found_bucket = 1;
+            /*ready_bucket = *bucket;*/
+            /*printf("found address exact match!!\n");*/
             break;
         }
+        prev_bucket = ready_bucket;
     }
 
     /* add to linked list if this exact mac address has not yet been seen
      * but the bucket is already occupied by mac addresses with the same sum
      */
-    if(!found_bucket)*bucket = ((*bucket)->next = alloc_mac_addr_bucket(mac_addr));
+    if(!found_bucket){
+        /**bucket = ((*bucket)->next = alloc_mac_addr_bucket(mac_addr));*/
+        /*printf("couldn't find exact match! new linked list bucket created\n");*/
+        /*ready_bucket = ((*bucket)->next = alloc_mac_addr_bucket(mac_addr));*/
+        /*ready_bucket = (ready_bucket->next = alloc_mac_addr_bucket(mac_addr));*/
+        ready_bucket = (prev_bucket->next = alloc_mac_addr_bucket(mac_addr));
+    }
 
-    /* at this point, *bucket will contain a struct mac_addr ready for insertion
-     * now all we need to do is find the appropriate ssid field and insert a new
-     * probe request timestamp
+    /* at this point, ready_bucket will contain a struct mac_addr ready for insertion
+     * now all we need to do is find the appropriate ssid field/create one if none exists
+     * and insert a new probe request timestamp
      */
 
+    if(!ready_bucket->probes){
+        ready_bucket->probes = malloc(sizeof(struct probe_storage)); init_probe_storage(ready_bucket->probes, ssid);
+    }
+
     found_bucket = 0;
-    for(ps = (*bucket)->probes; ps->next; ps = ps->next){
-        printf("found %i pbs\n", ps->n_probes); 
+    /*for(ps = (*bucket)->probes; ps->next; ps = ps->next){*/
+    for(ps = ready_bucket->probes; ps; ps = ps->next){
         if(!memcmp(ps->ssid, ssid, 32)){
+        /*printf("found %i pbs\n", ps->n_probes); */
             found_bucket = 1;
             break;
         }
@@ -107,9 +129,9 @@ if not found, alloc bucket
      */
     if(!found_bucket){
         struct probe_storage* tmp = malloc(sizeof(struct probe_storage));
-        init_probe_storage(tmp);
-        tmp->next = (*bucket)->probes;
-        ps = (*bucket)->probes = tmp;
+        init_probe_storage(tmp, ssid);
+        tmp->next = ready_bucket->probes;
+        ps = ready_bucket->probes = tmp;
         memcpy(ps->ssid, ssid, 32);
     }
 
@@ -141,7 +163,10 @@ int main(){
     init_probe_history(&ph);
     insert_probe_request(&ph, addr, ssid);
     addr[0] = 0x99;
-    addr[1] = 0x1f;
+    addr[1] = 0x1a;
+    insert_probe_request(&ph, addr, ssid);
+    insert_probe_request(&ph, addr, ssid);
+    insert_probe_request(&ph, addr, ssid);
     insert_probe_request(&ph, addr, ssid);
 
     p_probes(&ph);
