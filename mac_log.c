@@ -107,6 +107,7 @@ if not found, alloc bucket
         init_probe_storage(tmp);
         tmp->next = (*bucket)->probes;
         ps = (*bucket)->probes = tmp;
+        memcpy(ps->ssid, ssid, 32);
     }
 
     /* at this point, ps will contain the appropriate probe list */
@@ -115,15 +116,29 @@ if not found, alloc bucket
 }
 
 void p_probes(struct probe_history* ph){
+    struct mac_addr* ma;
+    for(int i = 0; i < (0xff*6)+1; ++i){
+        if((ma = ph->buckets[i])){
+            for(; ma; ma = ma->next){
+                printf("%hhx:%hhx:%hhx:%hhx:%hhx:%hhx's requests:\n", ma->addr[0], ma->addr[1], ma->addr[2], ma->addr[3],
+                       ma->addr[4], ma->addr[5]);
+                for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
+                    printf("  %i probes to \"%s\"\n", ps->n_probes, ps->ssid);
+                }
+            }
+        }
+    }
 }
 
 int main(){
     struct probe_history ph;
-    uint8_t addr[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+    uint8_t addr[] = {0x1f, 0x99, 0x84, 0xa4, 0x19, 0x23};
     char ssid[32] = "asher's network";
 
     init_probe_history(&ph);
     insert_probe_request(&ph, addr, ssid);
+
+    p_probes(&ph);
 
     return 0;
 }
