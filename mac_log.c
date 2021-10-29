@@ -42,6 +42,13 @@ struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
 }
 
 void insert_probe(struct probe_storage* ps){
+    time_t t = time(NULL);
+
+    /* we ignore probes that occur in the same second
+     * as the next most recently received probe
+     */
+    if(t == ps->probe_times[ps->n_probes-1])return;
+
     if(ps->n_probes == ps->probe_cap){
         ps->probe_cap *= 2;
         time_t* tmp = malloc(sizeof(time_t)*ps->probe_cap);
@@ -49,7 +56,7 @@ void insert_probe(struct probe_storage* ps){
         free(ps->probe_times);
         ps->probe_times = tmp;
     }
-    ps->probe_times[ps->n_probes++] = time(NULL);
+    ps->probe_times[ps->n_probes++] = t;
 }
 
 
