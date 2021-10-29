@@ -1,4 +1,5 @@
 #include <string.h>
+#include <time.h>
 #include <stdlib.h>
 
 #include "mac_log.h"
@@ -28,6 +29,17 @@ struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
     return new_entry;
 }
 
+void insert_probe(struct probe_storage* ps){
+    if(ps->n_probes == ps->probe_cap){
+        ps->probe_cap *= 2;
+        uint32_t* tmp = malloc(sizeof(uint32_t)*ps->probe_cap);
+        memcpy(tmp, ps->probe_times, sizeof(uint32_t)*ps->n_probes);
+        free(ps->probe_times);
+        ps->probe_times = tmp;
+    }
+    ps->probe_times[ps->n_probes++] = time(NULL);
+}
+
 
 void insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32]){
     int idx = sum_mac_addr(mac_addr);
@@ -55,7 +67,9 @@ if not found, alloc bucket
     /* add to linked list if this exact mac address has not yet been seen
      * but the bucket is already occupied by mac addresses with the same sum
      */
-    if(!found_bucket)(*bucket)->next = alloc_mac_addr_bucket(mac_addr);
+    if(!found_bucket)*bucket = ((*bucket)->next = alloc_mac_addr_bucket(mac_addr));
+
+    /* at this point, *bucket will contain a struct mac_addr ready for insertion */
 
 }
 
