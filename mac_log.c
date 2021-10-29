@@ -52,6 +52,7 @@ void insert_probe(struct probe_storage* ps){
 void insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32]){
     int idx = sum_mac_addr(mac_addr);
     struct mac_addr** bucket;// * new_entry = malloc(sizeof(struct mac_addr));
+    struct probe_storage* ps;
     _Bool found_bucket = 0;
 
     bucket = &ph->buckets[idx];
@@ -83,7 +84,7 @@ if not found, alloc bucket
      */
 
     found_bucket = 0;
-    for(struct probe_storage* ps = (*bucket)->probes; ps->next; ps = ps->next){
+    for(ps = (*bucket)->probes; ps->next; ps = ps->next){
         if(!memcmp(ps->ssid, ssid, 32)){
             found_bucket = 1;
             break;
@@ -93,14 +94,20 @@ if not found, alloc bucket
     /* if we don't have an entry matching ssid for a given mac address,
      * it's time to insert a new one into the front of our mac address'
      * probe linked list
+     *
+     * TODO: if this isn't working, just add to the end using ps
+     * when this was originally writte, ps was defined in the for loop
      */
     if(!found_bucket){
         struct probe_storage* tmp = malloc(sizeof(struct probe_storage));
         init_probe_storage(tmp);
         tmp->next = (*bucket)->probes;
-        (*bucket)->probes = tmp;
+        ps = (*bucket)->probes = tmp;
     }
 
+    /* at this point, ps will contain the appropriate probe list */
+
+    insert_probe(ps);
 }
 
 int main(){
