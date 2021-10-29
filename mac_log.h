@@ -18,11 +18,13 @@ struct mac_addr{
 
 struct probe_history{
     struct mac_addr* buckets[(0xff*6)+1];
+    int unique_addresses;
 };
 
 void init_probe_history(struct probe_history* ph);
 void insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32]);
 void p_probes(struct probe_history* ph);
+void free_probe_history(struct probe_history* ph);
 
 /*
  * hashing structure to store mac addresses

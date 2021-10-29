@@ -6,6 +6,7 @@
 #include "mac_log.h"
 
 void init_probe_history(struct probe_history* ph){
+    ph->unique_addresses = 0;
     for(int i = 0; i < (0xff*6)+1; ++i){
         ph->buckets[i] = NULL;
     }
@@ -63,6 +64,7 @@ void insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ss
     /* initialize bucket if not found */
     if(!*bucket){
         /*printf("no bucket found at idx %i, creating!\n", idx);*/
+        ++ph->unique_addresses;
         *bucket = alloc_mac_addr_bucket(mac_addr);
     }
 
@@ -83,7 +85,10 @@ void insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ss
     /* add to linked list if this exact mac address has not yet been seen
      * but the bucket is already occupied by mac addresses with the same sum
      */
-    if(!found_bucket)ready_bucket = (prev_bucket->next = alloc_mac_addr_bucket(mac_addr));
+    if(!found_bucket){
+        ++ph->unique_addresses;
+        ready_bucket = (prev_bucket->next = alloc_mac_addr_bucket(mac_addr));
+    }
 
     /* at this point, ready_bucket will contain a struct mac_addr ready for insertion
      * now all we need to do is find the appropriate ssid field/create one if none exists
@@ -123,19 +128,103 @@ void insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ss
     insert_probe(ps);
 }
 
+/*
+TODO - note insertion command for suspected identity
+TODO - make this threadsafe but fast by having a separate mutex lock at each bucket index
+*/
+/*
+ * i'll split this up into different layers so that i can have functions that print requests of a given mac address
+ * this will be helpful in the repl, where i can issue commands to print the number of unique mac addresses, which is now tracked
+ *
+ * as well as a mac address lookup command, that lets the user print mac addr nots and all requests by a given mac
+ *
+ * as well as an ssid command that prints all users that have attempted to connect to a given ssid
+ *   this will be very slow, but is going to be called rarely
+ *
+ * as well as a mac address and ssid lookup command that will print time and date of each probe from a given mac to a given ssid
+ *   to achieve this, the lowest level print function will optionally print all probe times
+*/
+
+void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* prepend){
+    char date_str[30];
+    struct tm lt;
+
+    if(prepend)fputs(prepend, stdout);
+    
+    printf("%i probes to \"%s\"\n", ps->n_probes, ps->ssid);
+
+    if(!verbose)return;
+
+    for(int i = 0; i < ps->n_probes; ++i){
+        localtime_r((time_t*)&ps->probe_times[i], &lt);
+        strftime(date_str, 30, "%A %B %d %Y @ %I:%M:%S", &lt);
+        if(prepend)fputs(prepend, stdout);
+        puts(date_str);
+    }
+}
+
+void p_mac_addr_probes(struct mac_addr* ma, _Bool p_timestamps){
+    printf("%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:\n", ma->addr[0], ma->addr[1],
+           ma->addr[2], ma->addr[3], ma->addr[4], ma->addr[5]);
+    if(ma->notes)printf("  notes: %s\n", ma->notes);
+
+    for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
+        p_probe_storage(ps, p_timestamps, "  ");
+    }
+}
+
 void p_probes(struct probe_history* ph){
     struct mac_addr* ma;
     for(int i = 0; i < (0xff*6)+1; ++i){
         if((ma = ph->buckets[i])){
-            for(; ma; ma = ma->next){
-                printf("%hhX:%hhX:%hhX:%hhX:%hhX:%hhX's requests:\n", ma->addr[0], ma->addr[1], ma->addr[2], ma->addr[3],
-                       ma->addr[4], ma->addr[5]);
-                for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
-                    printf("  %i probes to \"%s\"\n", ps->n_probes, ps->ssid);
-                }
-            }
+            /*
+             * for(; ma; ma = ma->next){
+             *     printf("%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX's requests:\n", ma->addr[0], ma->addr[1], ma->addr[2], ma->addr[3],
+             *            ma->addr[4], ma->addr[5]);
+             *     for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
+             *         printf("  %i probes to \"%s\"\n", ps->n_probes, ps->ssid);
+             *     }
+             * }
+            */
+            p_mac_addr_probes(ma, 0);
         }
     }
+}
+
+void free_probe_storage_lst(struct probe_storage* ps){
+    struct probe_storage* prev = NULL;
+    for(struct probe_storage* psp = ps; psp; psp = psp->next){
+        if(prev)free(prev);
+        free(psp->probe_times);
+        prev = psp;
+    }
+    free(prev);
+}
+
+void free_mac_addr_lst(struct mac_addr* ma){
+    struct mac_addr* prev = NULL;
+    for(struct mac_addr* map = ma; map; map = map->next){
+        if(prev)free(prev);
+        free_probe_storage_lst(map->probes);
+        prev = map;
+    }
+    free(prev);
+}
+
+void free_probe_history(struct probe_history* ph){
+    for(int i = 0; i < (0xff*6)+1; ++i){
+        if(ph->buckets[i]){
+            free_mac_addr_lst(ph->buckets[i]);
+        }
+    }
+}
+
+void gen_rand_mac_addr(uint8_t dest[6]){
+    int x = random();
+
+    dest[0] = 0x0a;
+    dest[1] = 0x0a;
+    memcpy(dest+2, &x, sizeof(int));
 }
 
 int main(){
@@ -143,19 +232,25 @@ int main(){
     uint8_t addr[] = {0x1f, 0x99, 0x84, 0xa4, 0x19, 0x23};
     char ssid[32] = "asher's network";
 
+    srand(time(NULL));
     init_probe_history(&ph);
+    p_mac_addr_probes();
     insert_probe_request(&ph, addr, ssid);
-    addr[0] = 0x99;
-    addr[1] = 0x1a;
-    insert_probe_request(&ph, addr, ssid);
+    for(int i = 0; i < 1301; ++i)
+        insert_probe_request(&ph, addr, ssid);
     ssid[0] = 'b';
+    /*addr[3] = 13;*/
     insert_probe_request(&ph, addr, ssid);
     ssid[0] = 'c';
-    insert_probe_request(&ph, addr, ssid);
-    ssid[0] = 'd';
-    insert_probe_request(&ph, addr, ssid);
+
+    for(int i = 0; i < 100000; ++i){
+        gen_rand_mac_addr(addr);
+        insert_probe_request(&ph, addr, ssid);
+    }
 
     p_probes(&ph);
+    printf("%i unique addresses\n", ph.unique_addresses);
+    free_probe_history(&ph);
 
     return 0;
 }
