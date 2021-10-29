@@ -4,12 +4,15 @@ struct probe_storage{
     char ssid[32];
     int n_probes, probe_cap;
     uint32_t* probe_times;
+
+    struct probe_storage* next;
 };
 
 struct mac_addr{
     uint8_t addr[6];
     char* notes;
-    struct probe_storage probes;
+    struct probe_storage* probes;
+
     struct mac_addr* next;
 };
 
