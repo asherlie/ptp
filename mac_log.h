@@ -3,7 +3,7 @@
 struct probe_storage{
     char ssid[32];
     int n_probes, probe_cap;
-    uint32_t* probe_times;
+    time_t* probe_times;
 
     struct probe_storage* next;
 };

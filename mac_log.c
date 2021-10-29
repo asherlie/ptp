@@ -24,7 +24,7 @@ void init_probe_storage(struct probe_storage* ps, char ssid[32]){
     ps->next = NULL;
     ps->n_probes = 0;
     ps->probe_cap = 10000;
-    ps->probe_times = malloc(sizeof(uint32_t)*ps->probe_cap);
+    ps->probe_times = malloc(sizeof(time_t)*ps->probe_cap);
     memcpy(ps->ssid, ssid, 32);
 }
 
@@ -44,8 +44,8 @@ struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
 void insert_probe(struct probe_storage* ps){
     if(ps->n_probes == ps->probe_cap){
         ps->probe_cap *= 2;
-        uint32_t* tmp = malloc(sizeof(uint32_t)*ps->probe_cap);
-        memcpy(tmp, ps->probe_times, sizeof(uint32_t)*ps->n_probes);
+        time_t* tmp = malloc(sizeof(time_t)*ps->probe_cap);
+        memcpy(tmp, ps->probe_times, sizeof(time_t)*ps->n_probes);
         free(ps->probe_times);
         ps->probe_times = tmp;
     }
@@ -138,7 +138,8 @@ TODO - make this threadsafe but fast by having a separate mutex lock at each buc
  *
  * as well as a mac address lookup command, that lets the user print mac addr nots and all requests by a given mac
  *
- * as well as an ssid command that prints all users that have attempted to connect to a given ssid
+ * TODO: write this:
+ *   as well as an ssid command that prints all users that have attempted to connect to a given ssid
  *   this will be very slow, but is going to be called rarely
  *
  * as well as a mac address and ssid lookup command that will print time and date of each probe from a given mac to a given ssid
@@ -158,7 +159,10 @@ void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* prepend){
     for(int i = 0; i < ps->n_probes; ++i){
         localtime_r((time_t*)&ps->probe_times[i], &lt);
         strftime(date_str, 40, "%A %B %d %Y @ %I:%M:%S %p", &lt);
-        if(prepend)fputs(prepend, stdout);
+        if(prepend){
+            fputs(prepend, stdout);
+            fputs(prepend, stdout);
+        }
         puts(date_str);
     }
 }
