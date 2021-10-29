@@ -146,7 +146,7 @@ TODO - make this threadsafe but fast by having a separate mutex lock at each buc
 */
 
 void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* prepend){
-    char date_str[30];
+    char date_str[40];
     struct tm lt;
 
     if(prepend)fputs(prepend, stdout);
@@ -157,7 +157,7 @@ void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* prepend){
 
     for(int i = 0; i < ps->n_probes; ++i){
         localtime_r((time_t*)&ps->probe_times[i], &lt);
-        strftime(date_str, 30, "%A %B %d %Y @ %I:%M:%S", &lt);
+        strftime(date_str, 40, "%A %B %d %Y @ %I:%M:%S %p", &lt);
         if(prepend)fputs(prepend, stdout);
         puts(date_str);
     }
@@ -173,20 +173,11 @@ void p_mac_addr_probes(struct mac_addr* ma, _Bool p_timestamps){
     }
 }
 
-void p_probes(struct probe_history* ph){
+void p_probes(struct probe_history* ph, _Bool verbose){
     struct mac_addr* ma;
     for(int i = 0; i < (0xff*6)+1; ++i){
         if((ma = ph->buckets[i])){
-            /*
-             * for(; ma; ma = ma->next){
-             *     printf("%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX's requests:\n", ma->addr[0], ma->addr[1], ma->addr[2], ma->addr[3],
-             *            ma->addr[4], ma->addr[5]);
-             *     for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
-             *         printf("  %i probes to \"%s\"\n", ps->n_probes, ps->ssid);
-             *     }
-             * }
-            */
-            p_mac_addr_probes(ma, 0);
+            p_mac_addr_probes(ma, verbose);
         }
     }
 }
@@ -234,7 +225,11 @@ int main(){
 
     srand(time(NULL));
     init_probe_history(&ph);
-    p_mac_addr_probes();
+
+    insert_probe_request(&ph, addr, ssid);
+    p_probes(&ph, 1);
+
+    return 0;
     insert_probe_request(&ph, addr, ssid);
     for(int i = 0; i < 1301; ++i)
         insert_probe_request(&ph, addr, ssid);
@@ -248,7 +243,7 @@ int main(){
         insert_probe_request(&ph, addr, ssid);
     }
 
-    p_probes(&ph);
+    p_probes(&ph, 0);
     printf("%i unique addresses\n", ph.unique_addresses);
     free_probe_history(&ph);
 
