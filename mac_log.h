@@ -17,7 +17,7 @@ struct mac_addr{
 };
 
 struct probe_history{
-    struct mac_addr* buckets[0xff*6];
+    struct mac_addr* buckets[(0xff*6)+1];
 };
 
 void init_probe_history(struct probe_history* ph);

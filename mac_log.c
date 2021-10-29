@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 #include <stdlib.h>
@@ -5,7 +6,9 @@
 #include "mac_log.h"
 
 void init_probe_history(struct probe_history* ph){
-    memset(ph->buckets, 0, sizeof(struct mac_addr*)*(0xff*6));
+    for(int i = 0; i < (0xff*6)+1; ++i){
+        ph->buckets[i] = NULL;
+    }
 }
 
 int sum_mac_addr(uint8_t mac_addr[6]){
@@ -67,6 +70,7 @@ if not found, alloc bucket
 #endif
 
     for(; (*bucket)->next; *bucket = (*bucket)->next){
+        printf("bucket next: %p\n", (void*)(*bucket)->next);
         if(!memcmp((*bucket)->addr, mac_addr, 6)){
             found_bucket = 1;
             break;
@@ -110,6 +114,16 @@ if not found, alloc bucket
     insert_probe(ps);
 }
 
+void p_probes(struct probe_history* ph){
+}
+
 int main(){
+    struct probe_history ph;
+    uint8_t addr[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+    char ssid[32] = "asher's network";
+
+    init_probe_history(&ph);
+    insert_probe_request(&ph, addr, ssid);
+
     return 0;
 }
