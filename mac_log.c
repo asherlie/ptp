@@ -66,21 +66,15 @@ void insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ss
         *bucket = alloc_mac_addr_bucket(mac_addr);
     }
 
-#if 0
-lookup bucket, if not found, allocate with new specific mac
-go through all buckets looking for mac
-if not found, alloc bucket
-#endif
+    #if 0
+    lookup bucket, if not found, allocate with new specific mac
+    go through all buckets looking for mac
+    if not found, alloc bucket
+    #endif
 
-    /*for(; (*bucket)->next; *bucket = (*bucket)->next){*/
     for(ready_bucket = *bucket; ready_bucket; ready_bucket = ready_bucket->next){
-    /*for(; (*bucket); *bucket = (*bucket)->next){*/
-        /*printf("bucket next: %p\n", (void*)(*bucket)->next);*/
-        /*if(!memcmp((*bucket)->addr, mac_addr, 6)){*/
         if(!memcmp(ready_bucket->addr, mac_addr, 6)){
             found_bucket = 1;
-            /*ready_bucket = *bucket;*/
-            /*printf("found address exact match!!\n");*/
             break;
         }
         prev_bucket = ready_bucket;
@@ -89,13 +83,7 @@ if not found, alloc bucket
     /* add to linked list if this exact mac address has not yet been seen
      * but the bucket is already occupied by mac addresses with the same sum
      */
-    if(!found_bucket){
-        /**bucket = ((*bucket)->next = alloc_mac_addr_bucket(mac_addr));*/
-        /*printf("couldn't find exact match! new linked list bucket created\n");*/
-        /*ready_bucket = ((*bucket)->next = alloc_mac_addr_bucket(mac_addr));*/
-        /*ready_bucket = (ready_bucket->next = alloc_mac_addr_bucket(mac_addr));*/
-        ready_bucket = (prev_bucket->next = alloc_mac_addr_bucket(mac_addr));
-    }
+    if(!found_bucket)ready_bucket = (prev_bucket->next = alloc_mac_addr_bucket(mac_addr));
 
     /* at this point, ready_bucket will contain a struct mac_addr ready for insertion
      * now all we need to do is find the appropriate ssid field/create one if none exists
@@ -103,14 +91,13 @@ if not found, alloc bucket
      */
 
     if(!ready_bucket->probes){
-        ready_bucket->probes = malloc(sizeof(struct probe_storage)); init_probe_storage(ready_bucket->probes, ssid);
+        ready_bucket->probes = malloc(sizeof(struct probe_storage));
+        init_probe_storage(ready_bucket->probes, ssid);
     }
 
     found_bucket = 0;
-    /*for(ps = (*bucket)->probes; ps->next; ps = ps->next){*/
     for(ps = ready_bucket->probes; ps; ps = ps->next){
         if(!memcmp(ps->ssid, ssid, 32)){
-        /*printf("found %i pbs\n", ps->n_probes); */
             found_bucket = 1;
             break;
         }
@@ -122,10 +109,6 @@ if not found, alloc bucket
      *
      * TODO: if this isn't working, just add to the end using ps
      * when this was originally writte, ps was defined in the for loop
-     */
-    /* TODO: having issues here because there's already a malloc'd probe_storage
-     * and we're just inserting in front of it
-     * we should not pre-alloc this
      */
     if(!found_bucket){
         struct probe_storage* tmp = malloc(sizeof(struct probe_storage));
@@ -145,7 +128,7 @@ void p_probes(struct probe_history* ph){
     for(int i = 0; i < (0xff*6)+1; ++i){
         if((ma = ph->buckets[i])){
             for(; ma; ma = ma->next){
-                printf("%hhx:%hhx:%hhx:%hhx:%hhx:%hhx's requests:\n", ma->addr[0], ma->addr[1], ma->addr[2], ma->addr[3],
+                printf("%hhX:%hhX:%hhX:%hhX:%hhX:%hhX's requests:\n", ma->addr[0], ma->addr[1], ma->addr[2], ma->addr[3],
                        ma->addr[4], ma->addr[5]);
                 for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
                     printf("  %i probes to \"%s\"\n", ps->n_probes, ps->ssid);
@@ -165,8 +148,11 @@ int main(){
     addr[0] = 0x99;
     addr[1] = 0x1a;
     insert_probe_request(&ph, addr, ssid);
+    ssid[0] = 'b';
     insert_probe_request(&ph, addr, ssid);
+    ssid[0] = 'c';
     insert_probe_request(&ph, addr, ssid);
+    ssid[0] = 'd';
     insert_probe_request(&ph, addr, ssid);
 
     p_probes(&ph);
