@@ -50,11 +50,9 @@ void insert_probe(struct probe_storage* ps){
 }
 
 
-
-
 void insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32]){
     int idx = sum_mac_addr(mac_addr);
-    struct mac_addr** bucket;// * new_entry = malloc(sizeof(struct mac_addr));
+    struct mac_addr** bucket;
     struct probe_storage* ps;
     _Bool found_bucket = 0;
 
@@ -89,6 +87,7 @@ if not found, alloc bucket
 
     found_bucket = 0;
     for(ps = (*bucket)->probes; ps->next; ps = ps->next){
+        printf("found %i pbs\n", ps->n_probes); 
         if(!memcmp(ps->ssid, ssid, 32)){
             found_bucket = 1;
             break;
@@ -101,6 +100,10 @@ if not found, alloc bucket
      *
      * TODO: if this isn't working, just add to the end using ps
      * when this was originally writte, ps was defined in the for loop
+     */
+    /* TODO: having issues here because there's already a malloc'd probe_storage
+     * and we're just inserting in front of it
+     * we should not pre-alloc this
      */
     if(!found_bucket){
         struct probe_storage* tmp = malloc(sizeof(struct probe_storage));
@@ -136,6 +139,9 @@ int main(){
     char ssid[32] = "asher's network";
 
     init_probe_history(&ph);
+    insert_probe_request(&ph, addr, ssid);
+    addr[0] = 0x99;
+    addr[1] = 0x1f;
     insert_probe_request(&ph, addr, ssid);
 
     p_probes(&ph);
