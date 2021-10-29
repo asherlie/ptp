@@ -47,7 +47,7 @@ void insert_probe(struct probe_storage* ps){
     /* we ignore probes that occur in the same second
      * as the next most recently received probe
      */
-    if(t == ps->probe_times[ps->n_probes-1])return;
+    if(ps->n_probes && t == ps->probe_times[ps->n_probes-1])return;
 
     if(ps->n_probes == ps->probe_cap){
         ps->probe_cap *= 2;
@@ -133,6 +133,16 @@ void insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ss
     /* at this point, ps will contain the appropriate probe list */
 
     insert_probe(ps);
+}
+
+void add_note(struct probe_history* ph, uint8_t addr[6], char* note){
+    struct mac_addr* ma = ph->buckets[sum_mac_addr(addr)];
+    for(; ma; ma = ma->next){
+        if(!memcmp(ma->addr, addr, 6)){
+            ma->notes = note;
+            return;
+        }
+    }
 }
 
 /*
