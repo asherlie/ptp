@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -6,6 +7,7 @@
 #include "mac_log.h"
 
 void init_probe_history(struct probe_history* ph){
+    pthread_mutex_init(&ph->lock, NULL);
     ph->unique_addresses = 0;
     for(int i = 0; i < (0xff*6)+1; ++i){
         ph->buckets[i] = NULL;
@@ -63,6 +65,8 @@ struct mac_addr* insert_probe_request(struct probe_history* ph, uint8_t mac_addr
     struct mac_addr** bucket, * prev_bucket, * ready_bucket;
     struct probe_storage* ps;
     _Bool found_bucket = 0;
+
+    pthread_mutex_lock(&ph->lock);
 
     bucket = &ph->buckets[idx];
 
@@ -132,17 +136,25 @@ struct mac_addr* insert_probe_request(struct probe_history* ph, uint8_t mac_addr
 
     insert_probe(ps, timestamp);
 
+    pthread_mutex_unlock(&ph->lock);
+
     return ready_bucket;
 }
 
 void add_note(struct probe_history* ph, uint8_t addr[6], char* note){
-    struct mac_addr* ma = ph->buckets[sum_mac_addr(addr)];
+    struct mac_addr* ma;
+
+    pthread_mutex_lock(&ph->lock);
+
+    ma = ph->buckets[sum_mac_addr(addr)];
     for(; ma; ma = ma->next){
         if(!memcmp(ma->addr, addr, 6)){
             ma->notes = note;
+            pthread_mutex_unlock(&ph->lock);
             return;
         }
     }
+    pthread_mutex_unlock(&ph->lock);
 }
 
 /*
@@ -205,6 +217,9 @@ void p_mac_addr_probe(struct mac_addr* ma, _Bool p_timestamps){
 
 void p_probes(struct probe_history* ph, _Bool verbose){
     struct mac_addr* ma;
+
+    pthread_mutex_lock(&ph->lock);
+
     for(int i = 0; i < (0xff*6)+1; ++i){
         if((ma = ph->buckets[i])){
             for(; ma; ma = ma->next){
@@ -212,6 +227,7 @@ void p_probes(struct probe_history* ph, _Bool verbose){
             }
         }
     }
+    pthread_mutex_unlock(&ph->lock);
 }
 
 void free_probe_storage_lst(struct probe_storage* ps){
@@ -240,4 +256,5 @@ void free_probe_history(struct probe_history* ph){
             free_mac_addr_lst(ph->buckets[i]);
         }
     }
+    pthread_mutex_destroy(&ph->lock);
 }

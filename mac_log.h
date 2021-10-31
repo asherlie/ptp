@@ -18,6 +18,11 @@ struct mac_addr{
 };
 
 struct probe_history{
+    pthread_mutex_t lock;
+    /* TODO: should we use a separate lock for each bucket?
+     * is performance this big of an issue?
+     */
+    //pthread_mutex_t bucket_locks[(0xff*6)+1];
     struct mac_addr* buckets[(0xff*6)+1];
     int unique_addresses;
 };
