@@ -25,14 +25,14 @@ int main(int a, char** b){
 
     gen_rand_mac_addr(addr);
 
-    insert_probe_request(&ph, addr, ssid);
+    insert_probe_request(&ph, addr, ssid, 0);
     add_note(&ph, addr, strdup("hi mannn"));
-    insert_probe_request(&ph, addr, ssid);
-    insert_probe_request(&ph, addr, ssid);
+    insert_probe_request(&ph, addr, ssid, 0);
+    insert_probe_request(&ph, addr, ssid, 0);
     uint8_t tmp = addr[4];
     addr[4] = addr[5];
     addr[5] = tmp;
-    insert_probe_request(&ph, addr, ssid);
+    insert_probe_request(&ph, addr, ssid, 0);
     add_note(&ph, addr, strdup("second note"));
 
     p_probes(&ph, a > 1);
