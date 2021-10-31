@@ -60,7 +60,7 @@ void insert_probe(struct probe_storage* ps){
 }
 
 
-void insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32]){
+struct mac_addr* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32]){
     int idx = sum_mac_addr(mac_addr);
     struct mac_addr** bucket, * prev_bucket, * ready_bucket;
     struct probe_storage* ps;
@@ -133,6 +133,8 @@ void insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ss
     /* at this point, ps will contain the appropriate probe list */
 
     insert_probe(ps);
+
+    return ready_bucket;
 }
 
 void add_note(struct probe_history* ph, uint8_t addr[6], char* note){
@@ -146,8 +148,14 @@ void add_note(struct probe_history* ph, uint8_t addr[6], char* note){
 }
 
 /*
-TODO - add note insertion command for suspected identity
 TODO - make this threadsafe but fast by having a separate mutex lock at each bucket index
+       another option, the simpler one, would be to simply have a receiving thread which
+       we'll need regardless, which just reads in packets and a separate storage thread
+       which takes its time to process packets in the queue
+
+       there may be no need to have many processing threads
+
+TODO - users should be able to connect to issue commands/request info about mac addresses
 */
 /*
  * i'll split this up into different layers so that i can have functions that print requests of a given mac address
@@ -194,7 +202,6 @@ void p_mac_addr_probe(struct mac_addr* ma, _Bool p_timestamps){
     }
 }
 
-/*fixed p_probes, but now notes are being applied to too many elements*/
 void p_probes(struct probe_history* ph, _Bool verbose){
     struct mac_addr* ma;
     for(int i = 0; i < (0xff*6)+1; ++i){
