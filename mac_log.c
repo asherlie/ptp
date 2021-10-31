@@ -41,13 +41,11 @@ struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
     return new_entry;
 }
 
-void insert_probe(struct probe_storage* ps){
-    time_t t = time(NULL);
-
+void insert_probe(struct probe_storage* ps, time_t timestamp){
     /* we ignore probes that occur in the same second
      * as the next most recently received probe
      */
-    if(ps->n_probes && t == ps->probe_times[ps->n_probes-1])return;
+    if(ps->n_probes && timestamp == ps->probe_times[ps->n_probes-1])return;
 
     if(ps->n_probes == ps->probe_cap){
         ps->probe_cap *= 2;
@@ -56,11 +54,11 @@ void insert_probe(struct probe_storage* ps){
         free(ps->probe_times);
         ps->probe_times = tmp;
     }
-    ps->probe_times[ps->n_probes++] = t;
+    ps->probe_times[ps->n_probes++] = timestamp;
 }
 
 
-struct mac_addr* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32]){
+struct mac_addr* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32], time_t timestamp){
     int idx = sum_mac_addr(mac_addr);
     struct mac_addr** bucket, * prev_bucket, * ready_bucket;
     struct probe_storage* ps;
@@ -132,7 +130,7 @@ struct mac_addr* insert_probe_request(struct probe_history* ph, uint8_t mac_addr
 
     /* at this point, ps will contain the appropriate probe list */
 
-    insert_probe(ps);
+    insert_probe(ps, timestamp);
 
     return ready_bucket;
 }
@@ -156,6 +154,9 @@ TODO - make this threadsafe but fast by having a separate mutex lock at each buc
        there may be no need to have many processing threads
 
 TODO - users should be able to connect to issue commands/request info about mac addresses
+
+TODO - in the meantime before a working probe collector is written, i can spoof data in a
+       collector thread
 */
 /*
  * i'll split this up into different layers so that i can have functions that print requests of a given mac address
@@ -172,7 +173,7 @@ TODO - users should be able to connect to issue commands/request info about mac 
 */
 
 void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* prepend){
-    char date_str[40];
+    char date_str[50];
     struct tm lt;
 
     if(prepend)fputs(prepend, stdout);
@@ -183,7 +184,7 @@ void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* prepend){
 
     for(int i = 0; i < ps->n_probes; ++i){
         localtime_r((time_t*)&ps->probe_times[i], &lt);
-        strftime(date_str, 40, "%A %B %d %Y @ %I:%M:%S %p", &lt);
+        strftime(date_str, 50, "%A %B %d %Y @ %I:%M:%S %p", &lt);
         if(prepend){
             fputs(prepend, stdout);
             fputs(prepend, stdout);
