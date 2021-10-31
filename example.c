@@ -13,7 +13,8 @@ void gen_rand_mac_addr(uint8_t dest[6]){
     memcpy(dest+sizeof(int), &y, 6-sizeof(int));
 }
 
-int main(){
+int main(int a, char** b){
+    (void)b;
     struct probe_history ph;
     uint8_t addr[6];
     char ssid[32] = "one_direction";
@@ -34,7 +35,7 @@ int main(){
     insert_probe_request(&ph, addr, ssid);
     add_note(&ph, addr, strdup("second note"));
 
-    p_probes(&ph, 1);
+    p_probes(&ph, a > 1);
     printf("there are %i unique addresses\n", ph.unique_addresses);
 
     free_probe_history(&ph);
