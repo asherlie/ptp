@@ -1,5 +1,7 @@
 #include <stdlib.h>
+#include <pthread.h>
 #include <unistd.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "mac_log.h"
@@ -10,28 +12,32 @@
  * thread to pop from queue and process
 */
 
-void gen_rand_mac_addr(uint8_t dest[6]){
+void gen_rand_mac_addr(uint8_t dest[6], int unique_bytes){
     int x = random(), y = random();
 
     memcpy(dest, &x, sizeof(int));
     memcpy(dest+sizeof(int), &y, 6-sizeof(int));
+    for(int i = 0; i < 6-unique_bytes; ++i){
+        dest[i] = 0xff;
+    }
 }
 
 /* generates a spoofed packet */
 uint8_t* gen_packet(int* len){
-    uint8_t* pkt = malloc(64);
+    uint8_t* pkt = calloc(1, 64);
     if(len)*len = 64;
-    gen_rand_mac_addr(pkt);
+    gen_rand_mac_addr(pkt, 1);
+    strcpy((char*)pkt+6, "asher's network");
     
     return pkt;
 }
 
 void collect_packets(struct mqueue* mq){
-    uint8_t addr[6];
+    int pktlen;
+
     while(1){
-        gen_rand_mac_addr(addr);
-        insert_mq(mq, addr, 6);
-        usleep((random() + 100000) % 5000000);
+        insert_mq(mq, gen_packet(&pktlen), pktlen);
+        usleep((random() + 100000) % 1000000);
     }
 }
 
@@ -78,10 +84,39 @@ void* collector_thread(void* arg){
     return NULL;
 }
 
+struct mq_ph_pair{
+    struct mqueue* mq;
+    struct probe_history* ph;
+};
+
+void* processor_thread(void* arg){
+    struct mq_ph_pair* mqph = arg;
+    process_packets(mqph->mq, mqph->ph);
+    return NULL;
+}
+
 /*
  * void* repl_thread(){
  * }
 */
 
 int main(){
+    struct mqueue mq;
+    struct probe_history ph;
+    struct mq_ph_pair mqph = {.mq = &mq, .ph = &ph};
+
+    init_mq(&mq);
+    init_probe_history(&ph);
+
+    pthread_t pth[3];
+    pthread_create(pth, NULL, collector_thread, &mq);
+    pthread_create(pth+1, NULL, processor_thread, &mqph);
+
+    while(1){
+        usleep(1000000);
+        printf("\r%i", ph.unique_addresses);
+        p_probes(&ph, 1);
+        fflush(stdout);
+    }
+    pthread_join(pth[0], NULL);
 }
