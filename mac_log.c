@@ -184,7 +184,7 @@ void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* prepend){
     }
 }
 
-void p_mac_addr_probes(struct mac_addr* ma, _Bool p_timestamps){
+void p_mac_addr_probe(struct mac_addr* ma, _Bool p_timestamps){
     printf("%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:\n", ma->addr[0], ma->addr[1],
            ma->addr[2], ma->addr[3], ma->addr[4], ma->addr[5]);
     if(ma->notes)printf("  notes: %s\n", ma->notes);
@@ -194,11 +194,14 @@ void p_mac_addr_probes(struct mac_addr* ma, _Bool p_timestamps){
     }
 }
 
+/*fixed p_probes, but now notes are being applied to too many elements*/
 void p_probes(struct probe_history* ph, _Bool verbose){
     struct mac_addr* ma;
     for(int i = 0; i < (0xff*6)+1; ++i){
         if((ma = ph->buckets[i])){
-            p_mac_addr_probes(ma, verbose);
+            for(; ma; ma = ma->next){
+                p_mac_addr_probe(ma, verbose);
+            }
         }
     }
 }
