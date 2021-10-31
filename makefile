@@ -1,11 +1,14 @@
 CC=gcc
-CFLAGS= -Wall -Wextra -Wpedantic -Werror
+CFLAGS= -Wall -Wextra -Wpedantic -Werror -g
 
-all: example
+#all: example
+all: ptp 
 
+mq.o: mq.c mq.h
 mac_log.o: mac_log.c mac_log.h
 
 example: example.c mac_log.o
+ptp: ptp.c mq.o mac_log.o
 
 .PHONY:
 clean:

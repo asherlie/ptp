@@ -1,5 +1,6 @@
 #include <pthread.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "mq.h"
 
@@ -10,6 +11,7 @@ void init_mq(struct mqueue* mq){
 
 void insert_mq(struct mqueue* mq, uint8_t* packet, int len){
     struct mq_entry* mqe = malloc(sizeof(struct mq_entry));
+    mqe->timestamp = time(NULL);
     mqe->buf = packet;
     mqe->len = len;
     mqe->next = NULL;
