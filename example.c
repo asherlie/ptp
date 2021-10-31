@@ -4,6 +4,7 @@
 #include <time.h>
 #include <stdlib.h>
 
+#include "mq.h"
 #include "mac_log.h"
 
 void gen_rand_mac_addr(uint8_t dest[6]){
@@ -13,7 +14,17 @@ void gen_rand_mac_addr(uint8_t dest[6]){
     memcpy(dest+sizeof(int), &y, 6-sizeof(int));
 }
 
+void test_mq(){
+    struct mqueue mq;
+    uint8_t packet[1000];
+    init_mq(&mq);
+    insert_mq(&mq, packet, 1000);
+    pop_mq(&mq);
+}
+
 int main(int a, char** b){
+    test_mq();
+    return 0;
     (void)b;
     struct probe_history ph;
     uint8_t addr[6];

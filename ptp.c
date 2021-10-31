@@ -95,6 +95,38 @@ void* processor_thread(void* arg){
     return NULL;
 }
 
+void handle_command(char* cmd, struct probe_history* ph){
+    char* args[100] = {0};
+    char* sp = cmd, * prev = cmd;
+    int n_args = 0;
+    (void)ph;
+
+    while((sp = strchr(sp, ' '))){
+        *sp = 0;
+        args[n_args++] = prev;
+        prev = ++sp;
+    }
+    args[n_args++] = prev;
+
+    switch(*cmd){
+        case 'p':
+            p_probes(ph, args[1]);
+    }
+}
+
+void repl(struct probe_history* ph){
+    char* ln = NULL;
+    size_t sz = 0;
+    int len;
+
+    while(1){
+        len = getline(&ln, &sz, stdin);
+        ln[--len] = 0;
+
+        handle_command(ln, ph);
+    }
+    (void)ph;
+}
 /*
  * void* repl_thread(){
  * }
@@ -112,6 +144,7 @@ int main(){
     pthread_create(pth, NULL, collector_thread, &mq);
     pthread_create(pth+1, NULL, processor_thread, &mqph);
 
+    repl(&ph);
     while(1){
         usleep(1000000);
         printf("\r%i", ph.unique_addresses);
