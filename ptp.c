@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <pcap.h>
+
 #ifdef READLINE
 #include <readline/readline.h>
 #include <readline/history.h>
@@ -16,6 +18,51 @@
  * repl, thread to collect packets and add them to queue
  * thread to pop from queue and process
 */
+
+pcap_t* _pcap_init(){
+    pcap_t* pcap_data;
+    char errbuf[PCAP_ERRBUF_SIZE];
+    struct bpf_program bpf;
+
+    if(!(pcap_data = pcap_create("wlp3s0", errbuf))){
+        puts("pcap_create() failed");
+        return NULL;
+    }
+
+    if(pcap_set_immediate_mode(pcap_data, 1)){
+        puts("pcap_set_immediate_mode() failed");
+        return NULL;
+    }
+
+    if(!pcap_can_set_rfmon(pcap_data)){
+        puts("pcap_can_set_rfmon() failed");
+        return NULL;
+    }
+    
+    if(pcap_set_rfmon(pcap_data, 1)){
+        puts("pcap_set_rfmon() failed");
+        return NULL;
+    }
+
+    if(pcap_activate(pcap_data) < 0){
+        puts("pcap_activate() failed");
+        return NULL;
+    }
+
+    if(pcap_compile(pcap_data, &bpf, "type mgt subtype probe-req", 0, PCAP_NETMASK_UNKNOWN) == -1){
+        puts("pcap_compile() failed");
+        return NULL;
+    }
+
+    if(pcap_setfilter(pcap_data, &bpf) == -1){
+        puts("pcap_setfilter failed");
+        return NULL;
+    }
+
+    pcap_freecode(&bpf);
+
+    return pcap_data;
+}
 
 void gen_rand_mac_addr(uint8_t dest[6], int unique_bytes){
     int x = random(), y = random();
@@ -38,13 +85,37 @@ uint8_t* gen_packet(int* len){
     return pkt;
 }
 
+struct rtap_hdr{
+    uint8_t it_version;
+    uint8_t it_pad;
+    uint16_t it_len;
+    uint32_t it_present;
+} __attribute__((__packed__));
+
 void collect_packets(struct mqueue* mq){
     int pktlen;
+    struct pcap_pkthdr hdr;
+    const uint8_t* packet;
+
+    pcap_t* pc = _pcap_init();
 
     while(1){
+        packet = pcap_next(pc, &hdr);
+        #if 0
+        for(int i = 0; i < (int)hdr.len; ++i){
+            if((packet[i] > 'a' && packet[i] < 'z') || (packet[i] > 'A' && packet[i] < 'Z'))
+            44, 44-16
+                printf("%i: %s\n", i, (char*)packet+i);
+        }
+        #endif
+        /*printf("%s\n", (char*)packet+51-20);*/
+        struct rtap_hdr* rhdr = (struct rtap_hdr*)packet;
+        printf("zero: %i, rtap length: %i\n", rhdr->it_version, rhdr->it_len);
+        printf("%hhx:%hhx:%hhx:%hhx:%hhx:%hhx probed %s\n", packet[28], packet[29], packet[30], packet[31], packet[32], packet[33], packet+44);
+        /*printf("");*/
         insert_mq(mq, gen_packet(&pktlen), pktlen);
         /*usleep((random() + 100000) % 1000000);*/
-        usleep(5000000);
+        /*usleep(5000000);*/
     }
 }
 

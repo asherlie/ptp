@@ -200,6 +200,8 @@ TODO - in the meantime before a working probe collector is written, i can spoof 
  *       vim bindings, search history, ctrl-L to CLEAR!!!
  *
  * TODO: add [r]ange command to print entries within a range, enable filtering
+ *
+ * TODO: add mac address alerts - alert when mac sends a probe
  */
 void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* ssid, char* prepend){
     char date_str[50];
