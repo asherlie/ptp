@@ -185,9 +185,14 @@ TODO - in the meantime before a working probe collector is written, i can spoof 
  *   to achieve this, the lowest level print function will optionally print all probe times
 */
 
-void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* prepend){
+/* TODO: ssid filtering doesn't fully work, mac addresses of non matches are still printed
+ * TODO: fix issues exposed by valgrind
+ */
+void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* ssid, char* prepend){
     char date_str[50];
     struct tm lt;
+
+    if(ssid && !strstr(ps->ssid, ssid))return;
 
     if(prepend)fputs(prepend, stdout);
     
@@ -206,17 +211,19 @@ void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* prepend){
     }
 }
 
-void p_mac_addr_probe(struct mac_addr* ma, _Bool p_timestamps){
+void p_mac_addr_probe(struct mac_addr* ma, _Bool p_timestamps, char* ssid, uint8_t* mac){
+    if(mac && memcmp(ma->addr, mac, 6))return;
+    /* how do i not print this in case of non-matching ssid? */
     printf("%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:\n", ma->addr[0], ma->addr[1],
            ma->addr[2], ma->addr[3], ma->addr[4], ma->addr[5]);
     if(ma->notes)printf("  notes: %s\n", ma->notes);
 
     for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
-        p_probe_storage(ps, p_timestamps, "  ");
+        p_probe_storage(ps, p_timestamps, ssid, "  ");
     }
 }
 
-void p_probes(struct probe_history* ph, _Bool verbose){
+void p_probes(struct probe_history* ph, _Bool verbose, char* ssid, uint8_t* mac){
     struct mac_addr* ma;
 
     pthread_mutex_lock(&ph->lock);
@@ -224,7 +231,7 @@ void p_probes(struct probe_history* ph, _Bool verbose){
     for(int i = 0; i < (0xff*6)+1; ++i){
         if((ma = ph->buckets[i])){
             for(; ma; ma = ma->next){
-                p_mac_addr_probe(ma, verbose);
+                p_mac_addr_probe(ma, verbose, ssid, mac);
             }
         }
     }

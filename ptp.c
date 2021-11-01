@@ -26,7 +26,7 @@ void gen_rand_mac_addr(uint8_t dest[6], int unique_bytes){
 uint8_t* gen_packet(int* len){
     uint8_t* pkt = calloc(1, 64);
     if(len)*len = 64;
-    gen_rand_mac_addr(pkt, 1);
+    gen_rand_mac_addr(pkt, 6);
     strcpy((char*)pkt+6, "asher's network");
     
     return pkt;
@@ -38,7 +38,7 @@ void collect_packets(struct mqueue* mq){
     while(1){
         insert_mq(mq, gen_packet(&pktlen), pktlen);
         /*usleep((random() + 100000) % 1000000);*/
-        usleep(10);
+        usleep(5000000);
     }
 }
 
@@ -96,6 +96,13 @@ void* processor_thread(void* arg){
     return NULL;
 }
 
+_Bool parse_maddr(char* mstr, uint8_t mac[6]){
+    if(!mstr)return 0 ;
+    sscanf(mstr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+           mac, mac+1, mac+2, mac+3, mac+4, mac+5);
+    return 1;
+}
+
 void handle_command(char* cmd, struct probe_history* ph){
     char* args[100] = {0};
     char* sp = cmd, * prev = cmd;
@@ -128,13 +135,25 @@ void handle_command(char* cmd, struct probe_history* ph){
 
             possibly add a feature for changing directory in order to navigate
         #endif
-        /*ssid command - addr (ssid)?*/
-        case 's':
+        /* [m]ac / [a]ddr lookup */
+        case 'm':
+        case 'a':{
+            uint8_t mac[6] = {0};
+            parse_maddr(args[1], mac);
+            p_probes(ph, 1, args[2], mac);
             break;
+        }
+        /*ssid command - addr (ssid)?*/
+        case 's':{
+            uint8_t mac[6] = {0};
+            parse_maddr(args[2], mac);
+            p_probes(ph, 1, args[1], parse_maddr(args[2], mac) ? mac : NULL);
+            break;
+        }
         /* [n]ote */
         case 'n':{
-            uint8_t mac[6];
-            sscanf(args[1], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", mac, mac+1, mac+2, mac+3, mac+4, mac+5);
+            uint8_t mac[6] = {0};
+            parse_maddr(args[1], mac);
             if(add_note(ph, mac, args[2] ? strdup(args[2]) : NULL))
                 printf("added note to %s\n", args[1]);
             else puts("failed to find matching MAC address");
@@ -142,7 +161,7 @@ void handle_command(char* cmd, struct probe_history* ph){
         }
         /* [p]rint */
         case 'p':
-            p_probes(ph, args[1]);
+            p_probes(ph, args[1], NULL, NULL);
             break;
         /* [d]istinct */
         case 'd':
@@ -187,7 +206,7 @@ int main(){
     while(1){
         usleep(1000000);
         printf("\r%i", ph.unique_addresses);
-        p_probes(&ph, 1);
+        p_probes(&ph, 1, NULL, NULL);
         fflush(stdout);
     }
     pthread_join(pth[0], NULL);
