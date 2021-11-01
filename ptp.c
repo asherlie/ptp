@@ -37,7 +37,8 @@ void collect_packets(struct mqueue* mq){
 
     while(1){
         insert_mq(mq, gen_packet(&pktlen), pktlen);
-        usleep((random() + 100000) % 1000000);
+        /*usleep((random() + 100000) % 1000000);*/
+        usleep(10);
     }
 }
 
@@ -109,8 +110,46 @@ void handle_command(char* cmd, struct probe_history* ph){
     args[n_args++] = prev;
 
     switch(*cmd){
+        #if 0
+        the most important commands to implement for interacting with the data are:
+            note
+            note search
+            ssid
+
+            ssid search and mac search should be two separate commands
+            each print function should take an optional search term arg
+            the outermost has both options
+
+            ssid x y
+                and
+            mac y x
+            
+            will yield the same results
+
+            possibly add a feature for changing directory in order to navigate
+        #endif
+        /*ssid command - addr (ssid)?*/
+        case 's':
+            break;
+        /* [n]ote */
+        case 'n':{
+            uint8_t mac[6];
+            sscanf(args[1], "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", mac, mac+1, mac+2, mac+3, mac+4, mac+5);
+            if(add_note(ph, mac, args[2] ? strdup(args[2]) : NULL))
+                printf("added note to %s\n", args[1]);
+            else puts("failed to find matching MAC address");
+            break;
+        }
+        /* [p]rint */
         case 'p':
             p_probes(ph, args[1]);
+            break;
+        /* [d]istinct */
+        case 'd':
+            pthread_mutex_lock(&ph->lock);
+            printf("%i distinct MAC addresses collected\n", ph->unique_addresses);
+            pthread_mutex_unlock(&ph->lock);
+            break;
     }
 }
 

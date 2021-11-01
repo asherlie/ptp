@@ -141,7 +141,7 @@ struct mac_addr* insert_probe_request(struct probe_history* ph, uint8_t mac_addr
     return ready_bucket;
 }
 
-void add_note(struct probe_history* ph, uint8_t addr[6], char* note){
+_Bool add_note(struct probe_history* ph, uint8_t addr[6], char* note){
     struct mac_addr* ma;
 
     pthread_mutex_lock(&ph->lock);
@@ -151,10 +151,11 @@ void add_note(struct probe_history* ph, uint8_t addr[6], char* note){
         if(!memcmp(ma->addr, addr, 6)){
             ma->notes = note;
             pthread_mutex_unlock(&ph->lock);
-            return;
+            return 1;
         }
     }
     pthread_mutex_unlock(&ph->lock);
+    return 0;
 }
 
 /*
@@ -257,4 +258,19 @@ void free_probe_history(struct probe_history* ph){
         }
     }
     pthread_mutex_destroy(&ph->lock);
+}
+
+struct mac_addr* lookup_mac(struct probe_history* ph, uint8_t* mac){
+    struct mac_addr* ma;
+    pthread_mutex_lock(&ph->lock);
+    ma = ph->buckets[sum_mac_addr(mac)];
+    if(ma){
+        for(; ma; ma = ma->next){
+            if(!memcmp(ma->addr, mac, 6)){
+                break;
+            }
+        }
+    }
+    pthread_mutex_unlock(&ph->lock);
+    return ma;
 }
