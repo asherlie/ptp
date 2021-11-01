@@ -191,7 +191,8 @@ void repl(struct probe_history* ph){
 
     while(1){
         #ifdef READLINE
-        ln = readline(NULL);
+        if(ln)free(ln);
+        ln = readline("**PTP>** ");
         if(!ln || !*ln){
             for(int i = 0; i < 3; ++i){
                 printf(". ");
