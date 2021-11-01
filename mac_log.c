@@ -185,8 +185,21 @@ TODO - in the meantime before a working probe collector is written, i can spoof 
  *   to achieve this, the lowest level print function will optionally print all probe times
 */
 
-/* TODO: ssid filtering doesn't fully work, mac addresses of non matches are still printed
+/*
  * TODO: fix issues exposed by valgrind
+ * TODO: add client that can remote connect
+ * TODO: write a way to not lose my precious data - i'm thinking the following:
+ *          write to a file that has been fwrite()d with raw bytes of mac address followed by size of probe list
+ *          followed by raw bytes of probe list
+ *          i can go thru until there's no more file, insert_probe()ing mac addresses and then mallocing the perfect
+ *          amount of space and reading/copying over our probe request integers
+ *
+ *          this should occur every minute
+ *
+ * TODO: add readline() functionality, will improve the program greatly
+ *       vim bindings, search history, ctrl-L to CLEAR!!!
+ *
+ * TODO: add [r]ange command to print entries within a range, enable filtering
  */
 void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* ssid, char* prepend){
     char date_str[50];
@@ -212,7 +225,21 @@ void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* ssid, char* 
 }
 
 void p_mac_addr_probe(struct mac_addr* ma, _Bool p_timestamps, char* ssid, uint8_t* mac){
-    if(mac && memcmp(ma->addr, mac, 6))return;
+    _Bool ssid_match = !ssid;
+
+    /* if we have an ssid search term, we unfortunately need to check if there will be
+     * any matches in the probe storage before printint our addresses
+     */
+    if(ssid){
+        for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
+            if(strstr(ps->ssid, ssid)){
+                ssid_match = 1;
+                break;
+            }
+        }
+    }
+
+    if(!ssid_match || (mac && memcmp(ma->addr, mac, 6)))return;
     /* how do i not print this in case of non-matching ssid? */
     printf("%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:\n", ma->addr[0], ma->addr[1],
            ma->addr[2], ma->addr[3], ma->addr[4], ma->addr[5]);

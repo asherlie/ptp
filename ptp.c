@@ -28,6 +28,7 @@ uint8_t* gen_packet(int* len){
     if(len)*len = 64;
     gen_rand_mac_addr(pkt, 6);
     strcpy((char*)pkt+6, "asher's network");
+    pkt[6] += random() % 26;
     
     return pkt;
 }
@@ -135,6 +136,10 @@ void handle_command(char* cmd, struct probe_history* ph){
 
             possibly add a feature for changing directory in order to navigate
         #endif
+        /* [c]lear */
+        case 'c':
+            puts("\n\n========================================\n");
+            break;
         /* [m]ac / [a]ddr lookup */
         case 'm':
         case 'a':{
