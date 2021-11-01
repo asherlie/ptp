@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -Wall -Wextra -Wpedantic -Werror -pthread -g
+CFLAGS= -Wall -Wextra -Wpedantic -Werror -pthread -DREADLINE -lreadline -g
 
 #all: example
 all: ptp 

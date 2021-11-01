@@ -4,6 +4,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef READLINE
+#include <readline/readline.h>
+#include <readline/history.h>
+#endif
+
 #include "mac_log.h"
 #include "mq.h"
 
@@ -179,12 +184,30 @@ void handle_command(char* cmd, struct probe_history* ph){
 
 void repl(struct probe_history* ph){
     char* ln = NULL;
+    #ifndef READLINE
     size_t sz = 0;
     int len;
+    #endif
 
     while(1){
+        #ifdef READLINE
+        ln = readline(NULL);
+        if(!ln || !*ln){
+            for(int i = 0; i < 3; ++i){
+                printf(". ");
+                fflush(stdout);
+                usleep(50000);
+            }
+            printf("\r");
+            for(int i = 0; i < 3; ++i)printf("  ");
+            printf("\r");
+            continue;
+        }
+        add_history(ln);
+        #else
         len = getline(&ln, &sz, stdin);
         ln[--len] = 0;
+        #endif
 
         handle_command(ln, ph);
     }
