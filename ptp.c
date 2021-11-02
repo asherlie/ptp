@@ -24,7 +24,7 @@ pcap_t* _pcap_init(){
     char errbuf[PCAP_ERRBUF_SIZE];
     struct bpf_program bpf;
 
-    if(!(pcap_data = pcap_create("wlp3s0", errbuf))){
+    if(!(pcap_data = pcap_create("en0", errbuf))){
         puts("pcap_create() failed");
         return NULL;
     }
@@ -110,8 +110,32 @@ void collect_packets(struct mqueue* mq){
         #endif
         /*printf("%s\n", (char*)packet+51-20);*/
         struct rtap_hdr* rhdr = (struct rtap_hdr*)packet;
+        /*radiotag + length + x == ssidlen*/
+        printf("%hhx should be 4\n", packet[rhdr->it_len]);
+        /* packet+rhdr->it_len + 10 should be sender address */
         printf("zero: %i, rtap length: %i\n", rhdr->it_version, rhdr->it_len);
-        printf("%hhx:%hhx:%hhx:%hhx:%hhx:%hhx probed %s\n", packet[28], packet[29], packet[30], packet[31], packet[32], packet[33], packet+44);
+        /*printf("%hhx:%hhx:%hhx:%hhx:%hhx:%hhx probed %s\n", packet[28], packet[29], packet[30], packet[31], packet[32], packet[33], packet+44);*/
+        /* 6 bytes before sa should be 0xff */
+        /*if(memcmp(packet+rhdr->it_len+10-6-6, 6))*/
+        _Bool valid = 1;
+        for(int i = 0; i < 6; ++i){
+            if(packet[rhdr->it_len+10-6+i] != 0xff){
+                  valid = 0;
+                  break;
+            }
+        }
+        if(!valid)continue;
+        printf("%hhx:%hhx:%hhx:%hhx:%hhx:%hhx probed %s\n", packet[rhdr->it_len+10], packet[rhdr->it_len+11], packet[rhdr->it_len+12], packet[rhdr->it_len+13], packet[rhdr->it_len+14], packet[rhdr->it_len+15], NULL);
+
+        /*printf("ssid len: %hhx\n", packet + rhdr->it_len + 10+15);*/
+        /*this seems to be working!*/
+        printf("ssid len: %hhx %i\n", packet [ rhdr->it_len + 10+15], packet [ rhdr->it_len + 10+15]);
+        for(int i = 0; i < (int)packet[rhdr->it_len+10+15]; ++i){
+            printf("%c", packet[rhdr->it_len+10+15+1+i]);
+        }
+        puts("");
+
+        /* sa +15 is the length of the ssid */
         /*printf("");*/
         insert_mq(mq, gen_packet(&pktlen), pktlen);
         /*usleep((random() + 100000) % 1000000);*/
