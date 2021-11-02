@@ -24,7 +24,7 @@ pcap_t* _pcap_init(){
     char errbuf[PCAP_ERRBUF_SIZE];
     struct bpf_program bpf;
 
-    if(!(pcap_data = pcap_create("en0", errbuf))){
+    if(!(pcap_data = pcap_create("wlp3s0", errbuf))){
         puts("pcap_create() failed");
         return NULL;
     }
@@ -166,6 +166,7 @@ uint8_t** parse_raw_packet(uint8_t* packet, int len){
     uint8_t* ssid = calloc(1, 32);
     uint8_t* addr = calloc(1, 6);
     _Bool valid = 1;
+    (void)len;
     /*printf("%hhx should be 4\n", packet[rhdr->it_len]);*/
     valid = ((int)packet[rhdr->it_len+10+15]) && packet[rhdr->it_len] == 0x40;
     memcpy(addr, packet+rhdr->it_len+10, 6);
