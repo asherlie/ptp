@@ -99,8 +99,15 @@ void collect_packets(struct mqueue* mq){
 
     pcap_t* pc = _pcap_init();
 
+    char ssid[32];
+    uint8_t* packet_copy;
+
     while(1){
         packet = pcap_next(pc, &hdr);
+        packet_copy = malloc(hdr.len);
+        memcpy(packet_copy, packet, hdr.len);
+        insert_mq(mq, packet_copy, hdr.len);
+        continue;
         #if 0
         for(int i = 0; i < (int)hdr.len; ++i){
             if((packet[i] > 'a' && packet[i] < 'z') || (packet[i] > 'A' && packet[i] < 'Z'))
@@ -111,13 +118,14 @@ void collect_packets(struct mqueue* mq){
         /*printf("%s\n", (char*)packet+51-20);*/
         struct rtap_hdr* rhdr = (struct rtap_hdr*)packet;
         /*radiotag + length + x == ssidlen*/
-        printf("%hhx should be 4\n", packet[rhdr->it_len]);
         /* packet+rhdr->it_len + 10 should be sender address */
-        printf("zero: %i, rtap length: %i\n", rhdr->it_version, rhdr->it_len);
+        /*printf("zero: %i, rtap length: %i\n", rhdr->it_version, rhdr->it_len);*/
         /*printf("%hhx:%hhx:%hhx:%hhx:%hhx:%hhx probed %s\n", packet[28], packet[29], packet[30], packet[31], packet[32], packet[33], packet+44);*/
         /* 6 bytes before sa should be 0xff */
         /*if(memcmp(packet+rhdr->it_len+10-6-6, 6))*/
         _Bool valid = 1;
+        /*printf("%hhx should be 4\n", packet[rhdr->it_len]);*/
+        valid = ((int)packet[rhdr->it_len+10+15]) && packet[rhdr->it_len] == 0x40;
         for(int i = 0; i < 6; ++i){
             if(packet[rhdr->it_len+10-6+i] != 0xff){
                   valid = 0;
@@ -125,18 +133,26 @@ void collect_packets(struct mqueue* mq){
             }
         }
         if(!valid)continue;
-        printf("%hhx:%hhx:%hhx:%hhx:%hhx:%hhx probed %s\n", packet[rhdr->it_len+10], packet[rhdr->it_len+11], packet[rhdr->it_len+12], packet[rhdr->it_len+13], packet[rhdr->it_len+14], packet[rhdr->it_len+15], NULL);
+        /*printf("%hhx:%hhx:%hhx:%hhx:%hhx:%hhx probed %s\n", packet[rhdr->it_len+10], packet[rhdr->it_len+11], packet[rhdr->it_len+12], packet[rhdr->it_len+13], packet[rhdr->it_len+14], packet[rhdr->it_len+15], NULL);*/
 
         /*printf("ssid len: %hhx\n", packet + rhdr->it_len + 10+15);*/
         /*this seems to be working!*/
-        printf("ssid len: %hhx %i\n", packet [ rhdr->it_len + 10+15], packet [ rhdr->it_len + 10+15]);
-        for(int i = 0; i < (int)packet[rhdr->it_len+10+15]; ++i){
-            printf("%c", packet[rhdr->it_len+10+15+1+i]);
-        }
-        puts("");
+        /*
+         *printf("ssid len: %hhx %i\n", packet [ rhdr->it_len + 10+15], packet [ rhdr->it_len + 10+15]);
+         *for(int i = 0; i < (int)packet[rhdr->it_len+10+15]; ++i){
+         *    printf("%c", packet[rhdr->it_len+10+15+1+i]);
+         *}
+         *puts("");
+         */
+
+        /*printf("len: %i\n", (int)packet[rhdr->it_len+10+15]);*/
+        memset(ssid, 0, 32);
+        memcpy(ssid, packet+rhdr->it_len+10+15+1, (int)packet[rhdr->it_len+10+15]);
+        /*puts(ssid);*/
 
         /* sa +15 is the length of the ssid */
         /*printf("");*/
+        /*insert_mq(mq, packet);*/
         insert_mq(mq, gen_packet(&pktlen), pktlen);
         /*usleep((random() + 100000) % 1000000);*/
         /*usleep(5000000);*/
@@ -144,16 +160,32 @@ void collect_packets(struct mqueue* mq){
 }
 
 /* returns two pointers within pkt - the first is addr[6], second is ssid[32] */
-uint8_t** parse_raw_packet(uint8_t* pkt, int len){
+uint8_t** parse_raw_packet(uint8_t* packet, int len){
     uint8_t** ret = malloc(sizeof(uint8_t*)*2);
-    /* as of now, we know that the generated packets
-     * have mac address at first byte
-     */
-    (void)len;
+    struct rtap_hdr* rhdr = (struct rtap_hdr*)packet;
+    uint8_t* ssid = calloc(1, 32);
+    uint8_t* addr = calloc(1, 6);
+    _Bool valid = 1;
+    /*printf("%hhx should be 4\n", packet[rhdr->it_len]);*/
+    valid = ((int)packet[rhdr->it_len+10+15]) && packet[rhdr->it_len] == 0x40;
+    memcpy(addr, packet+rhdr->it_len+10, 6);
+    for(int i = 0; i < 6; ++i){
+        if(packet[rhdr->it_len+10-6+i] != 0xff){
+            valid = 0;
+            break;
+        }
+    }
+    if(!valid){
+        free(ret);
+        free(packet);
+        return NULL;
+    }
+    memcpy(ssid, packet+rhdr->it_len+10+15+1, (int)packet[rhdr->it_len+10+15]);
 
-    ret[0] = pkt;
-    ret[1] = pkt+6;
+    ret[0] = addr;
+    ret[1] = ssid;
 
+    /*free(packet);*/
     return ret;
 }
 
@@ -164,6 +196,7 @@ void process_packets(struct mqueue* mq, struct probe_history* ph){
     while(1){
         mqe = pop_mq(mq);
         fields = parse_raw_packet(mqe->buf, mqe->len);
+        if(!fields)continue;
         insert_probe_request(ph, fields[0], (char*)fields[1], mqe->timestamp);
 
         free(mqe->buf);
