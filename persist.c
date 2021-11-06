@@ -36,8 +36,18 @@ void dump_probe_history(struct probe_history* ph, FILE* fp){
         if((ma = ph->buckets[i])){
             for(; ma; ma = ma->next){
                 notelen = strlen(ma->notes);
+                /* deal with struct mac_addr */
                 fwrite(ma->addr, 1, 6, fp);
                 fwrite(&notelen, sizeof(int), 1, fp);
+                fwrite(ma->notes, 1, notelen, fp);
+                /* deal with probes */
+                for(struct probe_storage* ps = ma->probes;
+                    ps; ps = ps->next){
+                    
+                    fwrite(ps->ssid, 1, 32, fp);
+                    fwrite(&ps->n_probes, sizeof(int), 1, fp);
+                    fwrite(ps->probe_times, sizeof(time_t), ps->n_probes, fp);
+                }
             }
         }
     }
