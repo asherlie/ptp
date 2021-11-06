@@ -104,11 +104,12 @@ void gen_rand_mac_addr(uint8_t dest[6], int unique_bytes){
 
 void test(char* fn){
     FILE* fp = fopen(fn, "w");
-    struct probe_history ph;
+    struct probe_history ph, loaded_ph;
     uint8_t addr[6];
     char ssid[32] = "booboo child";
     srand(time(NULL));
     init_probe_history(&ph);
+    init_probe_history(&loaded_ph);
     for(int i = 0; i < 1000; ++i){
         /* the last 600 insertions will be to the same addr */
         gen_rand_mac_addr(addr, 6);
@@ -119,6 +120,12 @@ void test(char* fn){
     }
     dump_probe_history(&ph, fp);
     fclose(fp);
+
+    fp = fopen(fn, "r");
+    load_probe_history(&loaded_ph, fp);
+    fclose(fp);
+
+
     free_probe_history(&ph);
 }
 
