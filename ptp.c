@@ -12,6 +12,7 @@
 #endif
 
 #include "mac_log.h"
+#include "persist.h"
 #include "mq.h"
 
 /*
@@ -242,7 +243,6 @@ void handle_command(char* cmd, struct probe_history* ph){
     char* args[100] = {0};
     char* sp = cmd, * prev = cmd;
     int n_args = 0;
-    (void)ph;
 
     while((sp = strchr(sp, ' '))){
         *sp = 0;
@@ -270,6 +270,19 @@ void handle_command(char* cmd, struct probe_history* ph){
 
             possibly add a feature for changing directory in order to navigate
         #endif
+        /* [b]ackup */
+        case 'b':{
+            FILE* fp;
+            if(!args[1] || !(fp = fopen(args[1], "w"))){
+                puts("please provide a valid filename");
+                break;
+            }
+            dump_probe_history(ph, fp);
+            fclose(fp);
+
+            printf("all probe data has been written to \"%s\"\n", args[1]);
+            break;
+        }
         /* [c]lear */
         case 'c':
             puts("\n\n========================================\n");

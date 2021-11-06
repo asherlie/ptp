@@ -92,6 +92,7 @@ void load_probe_history(struct probe_history* ph, FILE* fp){
     pthread_mutex_unlock(&ph->lock);
 }
 
+#if 0
 void gen_rand_mac_addr(uint8_t dest[6], int unique_bytes){
     int x = random(), y = random();
 
@@ -106,8 +107,8 @@ void test(char* fn){
     FILE* fp = fopen(fn, "w");
     struct probe_history ph, loaded_ph;
     uint8_t addr[6];
-    char ssid[32] = "booboo child", * note = malloc(10);
-    strcpy(note, "HEYOOO");
+    char ssid[32] = "one_direction", * note = malloc(20);
+    strcpy(note, "this is a network");
     srand(time(NULL));
     init_probe_history(&ph);
     init_probe_history(&loaded_ph);
@@ -139,3 +140,4 @@ int main(int a, char** b){
     test(b[1]);
     return 0;
 }
+#endif
