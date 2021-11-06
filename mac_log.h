@@ -1,4 +1,7 @@
+#pragma once
+
 #include <stdint.h>
+#include <pthread.h>
 #include <time.h>
 
 struct probe_storage{

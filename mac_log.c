@@ -188,7 +188,7 @@ TODO - in the meantime before a working probe collector is written, i can spoof 
 /*
  * TODO: fix issues exposed by valgrind
  * TODO: add client that can remote connect
- * TODO: write a way to not lose my precious data - i'm thinking the following:
+ * TODO: write a way to not lose my precious data - i'm thinking the following: - THIS IS HIGH PRIORITY
  *          write to a file that has been fwrite()d with raw bytes of mac address followed by size of probe list
  *          followed by raw bytes of probe list
  *          i can go thru until there's no more file, insert_probe()ing mac addresses and then mallocing the perfect
@@ -196,12 +196,35 @@ TODO - in the meantime before a working probe collector is written, i can spoof 
  *
  *          this should occur every minute
  *
- * TODO: add readline() functionality, will improve the program greatly
- *       vim bindings, search history, ctrl-L to CLEAR!!!
- *
  * TODO: add [r]ange command to print entries within a range, enable filtering
  *
  * TODO: add mac address alerts - alert when mac sends a probe
+ *
+ * TODO: there should be a command to export addr's probes as csv - THIS IS HIGH PRIORITY
+ *       it can then easily be graphed, which would be enlightening
+ *
+ *       the export command should be able to be filtered both by ssid and mac address or EITHER
+ *       i can possibly bake this into the existing print functions
+ *
+ * TODO: there should be a command to print by most recent, to do this i can keep a separate linked list
+ *       that just has references to the existing struct mac_addr*s, each one is added, it's inserted also
+ *       into the front of this new list, this creates a time ordered list
+ *
+ *       this is also how we'll implement the range command - it'll be trivial once we have a time sorted
+ *       list - iterate until time is too great, then stop
+ *
+ * TODO: search by note
+ *
+ * TODO: print new to me command
+ *
+ * TODO: [m]ost_recent n - this command prints the n most recently received probes
+ *
+ * TODO: INTERESTING - add field in each probe for proximity - distance from router
+ *       i can base this off of power, WOW
+ *
+ * most important missing features:
+ *   export as csv
+ *   dump to file for reloading to mem later
  */
 void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* ssid, char* prepend){
     char date_str[50];

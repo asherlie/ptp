@@ -106,7 +106,8 @@ void test(char* fn){
     FILE* fp = fopen(fn, "w");
     struct probe_history ph, loaded_ph;
     uint8_t addr[6];
-    char ssid[32] = "booboo child";
+    char ssid[32] = "booboo child", * note = malloc(10);
+    strcpy(note, "HEYOOO");
     srand(time(NULL));
     init_probe_history(&ph);
     init_probe_history(&loaded_ph);
@@ -114,6 +115,7 @@ void test(char* fn){
         /* the last 600 insertions will be to the same addr */
         gen_rand_mac_addr(addr, 6);
         insert_probe_request(&ph, addr, ssid, time(NULL));
+        add_note(&ph, addr, note);
     }
     for(int i = 0; i < 10000; ++i){
         insert_probe_request(&ph, addr, ssid, time(NULL));
