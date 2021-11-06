@@ -4,6 +4,7 @@ CFLAGS= -Wall -Wextra -Wpedantic -Werror -pthread -DREADLINE -lreadline -lpcap -
 #all: example
 all: ptp 
 
+persist.o: persist.c persist.h
 mq.o: mq.c mq.h
 mac_log.o: mac_log.c mac_log.h
 

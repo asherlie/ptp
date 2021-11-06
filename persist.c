@@ -125,11 +125,15 @@ void test(char* fn){
     load_probe_history(&loaded_ph, fp);
     fclose(fp);
 
+    p_probes(&loaded_ph, 1, NULL, NULL);
+    puts("----SEPARATOR----");
+    p_probes(&ph, 1, NULL, NULL);
 
     free_probe_history(&ph);
 }
 
 int main(int a, char** b){
+    (void)a;
     test(b[1]);
     return 0;
 }
