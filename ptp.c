@@ -290,6 +290,7 @@ void handle_command(char* cmd, struct probe_history* ph){
                 puts("please provide a valid filename");
                 break;
             }
+            /* hmm - this is sometimes appending n probes to a mac/ssid pair - TODO: look into this */
             load_probe_history(ph, fp);
             fclose(fp);
             printf("all entries backed up in \"%s\" have been merged/loaded into current storage\n", args[1]);
@@ -373,13 +374,24 @@ void repl(struct probe_history* ph){
  * }
 */
 
-int main(){
+/* if started with one arg - that filepath will be used to provide
+ * startup state to ptp AS WELL AS shutdown storage
+ *
+ * TODO: add SIGTERM signal handler to dump_probe_history()
+ */
+int main(int a, char** b){
     struct mqueue mq;
     struct probe_history ph;
     struct mq_ph_pair mqph = {.mq = &mq, .ph = &ph};
 
     init_mq(&mq);
     init_probe_history(&ph);
+
+    if(a > 1){
+        FILE* fp = fopen(b[1], "r");
+        load_probe_history(&ph, fp);
+        fclose(fp);
+    }
 
     pthread_t pth[3];
     pthread_create(pth, NULL, collector_thread, &mq);
