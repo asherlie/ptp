@@ -33,6 +33,7 @@ void* dump_mac_addr(FILE* fp){
 void dump_probe_history(struct probe_history* ph, FILE* fp){
     struct mac_addr* ma;
     int notelen;
+    int ps_len;
 
     pthread_mutex_lock(&ph->lock);
     for(int i = 0; i < (0xff*6)+1; ++i){
@@ -44,6 +45,11 @@ void dump_probe_history(struct probe_history* ph, FILE* fp){
                 fwrite(&notelen, sizeof(int), 1, fp);
                 if(ma->notes)fwrite(ma->notes, 1, notelen, fp);
                 /* deal with probes */
+                ps_len = 0;
+                for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
+                    ++ps_len;
+                }
+                fwrite(&ps_len, sizeof(int), 1, fp);
                 for(struct probe_storage* ps = ma->probes;
                     ps; ps = ps->next){
                     
@@ -53,6 +59,35 @@ void dump_probe_history(struct probe_history* ph, FILE* fp){
                 }
             }
         }
+    }
+    pthread_mutex_unlock(&ph->lock);
+}
+
+void load_probe_history(struct probe_history* ph, FILE* fp){
+    uint8_t addr[6];
+    char ssid[32], * note;
+    int notelen, ps_len, n_probes;
+    time_t probe_time;
+
+    pthread_mutex_lock(&ph->lock);
+
+    while(fread(addr, 1, 6, fp) == 6){
+        fread(&notelen, sizeof(int), 1, fp);
+        if(notelen){
+            note = malloc(notelen);
+            fread(note, 1, notelen, fp);
+        }
+        fread(&ps_len, sizeof(int), 1, fp);
+        for(int i = 0; i < ps_len; ++i){
+            fread(ssid, 1, 32, fp);
+            fread(&n_probes, sizeof(int), 1, fp);
+            for(int j = 0; j < n_probes; ++j){
+                fread(&probe_time, sizeof(time_t), 1, fp);
+                insert_probe_request(ph, addr, ssid, probe_time);
+            }
+        }
+        /* done after our iteration to ensure that fields exist */
+        if(notelen)add_note(ph, addr, note);
     }
     pthread_mutex_unlock(&ph->lock);
 }
