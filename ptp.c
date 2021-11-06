@@ -98,10 +98,12 @@ void collect_packets(struct mqueue* mq){
     struct pcap_pkthdr hdr;
     const uint8_t* packet;
 
-    pcap_t* pc = _pcap_init();
-
     char ssid[32];
     uint8_t* packet_copy;
+
+    pcap_t* pc = _pcap_init();
+
+    if(!pc)exit(0);
 
     while(1){
         packet = pcap_next(pc, &hdr);
