@@ -21,7 +21,7 @@ struct mac_addr{
 };
 
 struct probe_history{
-    pthread_mutex_t lock;
+    pthread_mutex_t lock, file_storage_lock;
     /* TODO: should we use a separate lock for each bucket?
      * is performance this big of an issue?
      */

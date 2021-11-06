@@ -36,6 +36,7 @@ void dump_probe_history(struct probe_history* ph, FILE* fp){
     int ps_len;
 
     pthread_mutex_lock(&ph->lock);
+    pthread_mutex_lock(&ph->file_storage_lock);
     for(int i = 0; i < (0xff*6)+1; ++i){
         if((ma = ph->buckets[i])){
             for(; ma; ma = ma->next){
@@ -61,6 +62,7 @@ void dump_probe_history(struct probe_history* ph, FILE* fp){
         }
     }
     pthread_mutex_unlock(&ph->lock);
+    pthread_mutex_unlock(&ph->file_storage_lock);
 }
 
 void load_probe_history(struct probe_history* ph, FILE* fp){
@@ -69,7 +71,7 @@ void load_probe_history(struct probe_history* ph, FILE* fp){
     int notelen, ps_len, n_probes;
     time_t probe_time;
 
-    pthread_mutex_lock(&ph->lock);
+    pthread_mutex_lock(&ph->file_storage_lock);
 
     while(fread(addr, 1, 6, fp) == 6){
         fread(&notelen, sizeof(int), 1, fp);
@@ -89,7 +91,7 @@ void load_probe_history(struct probe_history* ph, FILE* fp){
         /* done after our iteration to ensure that fields exist */
         if(notelen)add_note(ph, addr, note);
     }
-    pthread_mutex_unlock(&ph->lock);
+    pthread_mutex_unlock(&ph->file_storage_lock);
 }
 
 #if 0

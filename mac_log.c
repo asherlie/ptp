@@ -8,6 +8,7 @@
 
 void init_probe_history(struct probe_history* ph){
     pthread_mutex_init(&ph->lock, NULL);
+    pthread_mutex_init(&ph->file_storage_lock, NULL);
     ph->unique_addresses = 0;
     for(int i = 0; i < (0xff*6)+1; ++i){
         ph->buckets[i] = NULL;
@@ -317,6 +318,7 @@ void free_probe_history(struct probe_history* ph){
         }
     }
     pthread_mutex_destroy(&ph->lock);
+    pthread_mutex_destroy(&ph->file_storage_lock);
 }
 
 struct mac_addr* lookup_mac(struct probe_history* ph, uint8_t* mac){

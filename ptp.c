@@ -283,6 +283,18 @@ void handle_command(char* cmd, struct probe_history* ph){
             printf("all probe data has been written to \"%s\"\n", args[1]);
             break;
         }
+        /* [l]oad_backup */
+        case 'l':{
+            FILE* fp;
+            if(!args[1] || !(fp = fopen(args[1], "r"))){
+                puts("please provide a valid filename");
+                break;
+            }
+            load_probe_history(ph, fp);
+            fclose(fp);
+            printf("all entries backed up in \"%s\" have been merged/loaded into current storage\n", args[1]);
+            break;
+        }
         /* [c]lear */
         case 'c':
             puts("\n\n========================================\n");
