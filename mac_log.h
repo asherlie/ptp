@@ -27,7 +27,7 @@ struct probe_history{
      */
     //pthread_mutex_t bucket_locks[(0xff*6)+1];
     struct mac_addr* buckets[(0xff*6)+1];
-    int unique_addresses;
+    int unique_addresses, total_probes;
 };
 
 void init_probe_history(struct probe_history* ph);

@@ -10,6 +10,7 @@ void init_probe_history(struct probe_history* ph){
     pthread_mutex_init(&ph->lock, NULL);
     pthread_mutex_init(&ph->file_storage_lock, NULL);
     ph->unique_addresses = 0;
+    ph->total_probes = 0;
     for(int i = 0; i < (0xff*6)+1; ++i){
         ph->buckets[i] = NULL;
     }
@@ -44,11 +45,12 @@ struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
     return new_entry;
 }
 
-void insert_probe(struct probe_storage* ps, time_t timestamp){
+/* returns success */
+_Bool insert_probe(struct probe_storage* ps, time_t timestamp){
     /* we ignore probes that occur in the same second
      * as the next most recently received probe
      */
-    if(ps->n_probes && timestamp == ps->probe_times[ps->n_probes-1])return;
+    if(ps->n_probes && timestamp == ps->probe_times[ps->n_probes-1])return 0;
 
     if(ps->n_probes == ps->probe_cap){
         ps->probe_cap *= 2;
@@ -58,6 +60,7 @@ void insert_probe(struct probe_storage* ps, time_t timestamp){
         ps->probe_times = tmp;
     }
     ps->probe_times[ps->n_probes++] = timestamp;
+    return 1;
 }
 
 
@@ -135,7 +138,7 @@ struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac
 
     /* at this point, ps will contain the appropriate probe list */
 
-    insert_probe(ps, timestamp);
+    ph->total_probes += insert_probe(ps, timestamp);
 
     pthread_mutex_unlock(&ph->lock);
 

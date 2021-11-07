@@ -48,7 +48,7 @@ int time_t_comparator(const void* x, const void* y){
 void load_probe_history(struct probe_history* ph, FILE* fp){
     uint8_t addr[6];
     char ssid[32], * note;
-    int notelen, ps_len, n_probes;
+    int notelen, ps_len, n_probes, probes_removed = 0;
     time_t probe_time;
     struct probe_storage* ps;
 
@@ -87,6 +87,7 @@ void load_probe_history(struct probe_history* ph, FILE* fp){
                     memmove(ps->probe_times+i, ps->probe_times+i+1, (ps->n_probes-(i+1))*sizeof(time_t));
                     --ps->n_probes;
                     --i;
+                    ++probes_removed;
                 }
             }
         }
@@ -95,6 +96,11 @@ void load_probe_history(struct probe_history* ph, FILE* fp){
     }
 
     pthread_mutex_unlock(&ph->file_storage_lock);
+
+    /* subtract probes_removed to keep ph->total_probes accurate */
+    pthread_mutex_lock(&ph->lock);
+    ph->total_probes -= probes_removed;
+    pthread_mutex_unlock(&ph->lock);
 }
 
 #if 0

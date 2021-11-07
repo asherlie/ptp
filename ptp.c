@@ -331,9 +331,10 @@ void handle_command(char* cmd, struct probe_history* ph){
             p_probes(ph, args[1], NULL, NULL);
             break;
         /* [d]istinct */
+        /* [d]ata */
         case 'd':
             pthread_mutex_lock(&ph->lock);
-            printf("%i distinct MAC addresses collected\n", ph->unique_addresses);
+            printf("%i probes collected accross %i distinct MAC addresses\n", ph->total_probes, ph->unique_addresses);
             pthread_mutex_unlock(&ph->lock);
             break;
     }
