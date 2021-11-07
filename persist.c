@@ -41,11 +41,16 @@ void dump_probe_history(struct probe_history* ph, FILE* fp){
     pthread_mutex_unlock(&ph->file_storage_lock);
 }
 
+int time_t_comparator(const void* x, const void* y){
+    return *((time_t*)x) > *((time_t*)y);
+}
+
 void load_probe_history(struct probe_history* ph, FILE* fp){
     uint8_t addr[6];
     char ssid[32], * note;
     int notelen, ps_len, n_probes;
     time_t probe_time;
+    struct probe_storage* ps;
 
     pthread_mutex_lock(&ph->file_storage_lock);
 
@@ -61,12 +66,34 @@ void load_probe_history(struct probe_history* ph, FILE* fp){
             fread(&n_probes, sizeof(int), 1, fp);
             for(int j = 0; j < n_probes; ++j){
                 fread(&probe_time, sizeof(time_t), 1, fp);
-                insert_probe_request(ph, addr, ssid, probe_time);
+                /* this pointer is used for sorting after all probes have been inserted
+                 * this pointer should be identical with each iteration
+                 */
+                ps = insert_probe_request(ph, addr, ssid, probe_time);
+            }
+            /* after reading all probes for a given mac/ssid pair,
+             * it's time to sort/remove duplicates
+             * logs will grow incomprehensible otherwise
+             */
+            /* it's good to have our probe times sorted even without duplicates */
+            qsort(ps->probe_times, ps->n_probes, sizeof(time_t), time_t_comparator);
+            /* duplicates should only ever occur when two different backup have overlapping times
+             * OR when one backup is applied more than once
+             * so this expensive section is acceptable
+             */
+            /*would it be more efficient to just swap last and first and then re-sort? */
+            for(int i = 0; i < ps->n_probes-1; ++i){
+                if(ps->probe_times[i] == ps->probe_times[i+1]){
+                    memmove(ps->probe_times+i, ps->probe_times+i+1, (ps->n_probes-(i+1))*sizeof(time_t));
+                    --ps->n_probes;
+                    --i;
+                }
             }
         }
         /* done after our iteration to ensure that fields exist */
         if(notelen)add_note(ph, addr, note);
     }
+
     pthread_mutex_unlock(&ph->file_storage_lock);
 }
 

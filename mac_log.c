@@ -61,7 +61,7 @@ void insert_probe(struct probe_storage* ps, time_t timestamp){
 }
 
 
-struct mac_addr* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32], time_t timestamp){
+struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32], time_t timestamp){
     int idx = sum_mac_addr(mac_addr);
     struct mac_addr** bucket, * prev_bucket, * ready_bucket;
     struct probe_storage* ps;
@@ -139,7 +139,7 @@ struct mac_addr* insert_probe_request(struct probe_history* ph, uint8_t mac_addr
 
     pthread_mutex_unlock(&ph->lock);
 
-    return ready_bucket;
+    return ps;
 }
 
 _Bool add_note(struct probe_history* ph, uint8_t addr[6], char* note){
