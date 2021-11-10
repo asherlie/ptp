@@ -3,8 +3,49 @@
 #include <string.h>
 #include <time.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "mac_log.h"
+
+void init_mac_stack(struct mac_stack* ms, int n_most_recent){
+    assert(n_most_recent > 1);
+    pthread_mutex_init(&ms->lock, NULL);
+    ms->n_most_recent = n_most_recent;
+    ms->n_stored = 0;
+
+    ms->first = ms->last = NULL;
+}
+
+void insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
+    struct mac_stack_entry* mse;
+
+    if(ma->in_mac_stack)return;
+    ma->in_mac_stack = 1;
+
+    pthread_mutex_lock(&ms->lock);
+
+    if(ms->n_stored == ms->n_most_recent){
+        mse = ms->last;
+        ms->last = ms->last->prev;
+        ms->last->next = NULL;
+        mse->prev = NULL;
+        mse->next = ms->first;
+        ms->first->prev = mse;
+        ms->first = mse;
+    }
+    else{
+        mse = calloc(1, sizeof(struct mac_stack_entry));
+        mse->m_addr = ma;
+        if(!ms->first)ms->first = ms->last = mse;
+        else{
+            mse->next = ms->first;
+            ms->first->prev = mse;
+            ms->first = mse;
+        }
+    }
+    mse->m_addr = ma;
+    pthread_mutex_unlock(&ms->lock);
+}
 
 void init_probe_history(struct probe_history* ph){
     pthread_mutex_init(&ph->lock, NULL);
@@ -14,6 +55,7 @@ void init_probe_history(struct probe_history* ph){
     for(int i = 0; i < (0xff*6)+1; ++i){
         ph->buckets[i] = NULL;
     }
+    init_mac_stack(&ph->ms, 20);
 }
 
 int sum_mac_addr(uint8_t mac_addr[6]){
@@ -36,6 +78,7 @@ struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
     struct mac_addr* new_entry = malloc(sizeof(struct mac_addr));
  
     memcpy(new_entry->addr, mac_addr, 6);
+    new_entry->in_mac_stack = 0;
     new_entry->next = NULL;
     new_entry->notes = NULL;
     new_entry->probes = NULL;
@@ -142,6 +185,8 @@ struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac
 
     pthread_mutex_unlock(&ph->lock);
 
+    insert_mac_stack(&ph->ms, ready_bucket);
+
     return ps;
 }
 
@@ -222,14 +267,43 @@ TODO - in the meantime before a working probe collector is written, i can spoof 
  * TODO: print new to me command
  *
  * TODO: [m]ost_recent n - this command prints the n most recently received probes
+ *       i can just use p_mac_addr probe()
+ *       and keep track of the 1000 most recent using a separate
+ *       linked list
+ *
+ *       might be simpler to store just most recent addresses, not probes
+ *       would get complicated if we have to print 2 most recent probes from the same
+ *       address/ssid
+ *       since summary mode prints only most recent
+ *
+ *       or should it just be most recent ssid and we can spoof mac address for printing hmm...
  *
  * TODO: INTERESTING - add field in each probe for proximity - distance from router
  *       i can base this off of power, WOW
  *
+ * TODO: add more verbosity settings - summarize option
+ *       mac:
+ *          ssid, most recent
+ *
+ *          OR have non-verbose print most recent
+ *
  * most important missing features:
  *   export as csv
  *   dump to file for reloading to mem later
+ *
+ *   there might need to be two separate csv formats
+ *      one focused on ssid
+ *      one focused on mac address
+ *
+ *      ssid traffic over time
+ *      mac address requests over time
  */
+
+/*
+ * TODO: have boolean arg that determines whether to use relative time mode - subtract from current time
+ * this as well as the mac stack should be finished today
+ * mac stack can be simplified greatly
+*/
 void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* ssid, char* prepend){
     char date_str[50];
     struct tm lt;
@@ -240,9 +314,12 @@ void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* ssid, char* 
     
     printf("%i probes to \"%s\"\n", ps->n_probes, ps->ssid);
 
-    if(!verbose)return;
+    if(!verbose){
+        if(prepend)fputs(prepend, stdout);
+        puts("most recent probe:");
+    }
 
-    for(int i = 0; i < ps->n_probes; ++i){
+    for(int i = (verbose) ? 0 : ps->n_probes-1; i < ps->n_probes; ++i){
         localtime_r((time_t*)&ps->probe_times[i], &lt);
         strftime(date_str, 50, "%A %B %d %Y @ %I:%M:%S %p", &lt);
         if(prepend){
@@ -257,7 +334,7 @@ void p_mac_addr_probe(struct mac_addr* ma, _Bool p_timestamps, char* ssid, uint8
     _Bool ssid_match = !ssid;
 
     /* if we have an ssid search term, we unfortunately need to check if there will be
-     * any matches in the probe storage before printint our addresses
+     * any matches in the probe storage before print our addresses
      */
     if(ssid){
         for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
@@ -277,6 +354,22 @@ void p_mac_addr_probe(struct mac_addr* ma, _Bool p_timestamps, char* ssid, uint8
     for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
         p_probe_storage(ps, p_timestamps, ssid, "  ");
     }
+}
+
+/*void p_most_recent(struct mac_stack* ms, int n){*/
+void p_most_recent(struct probe_history* ph, int n){
+    int i = 0;
+    
+    pthread_mutex_lock(&ph->lock);
+    pthread_mutex_lock(&ph->ms.lock);
+    for(struct mac_stack_entry* mse = ph->ms.first; mse; mse = mse->next){
+        ++i;
+        /* TODO: enable both ssid and mac filters */
+        p_mac_addr_probe(mse->m_addr, 0, NULL, NULL);
+        if(i == n)break;
+    }
+    pthread_mutex_unlock(&ph->ms.lock);
+    pthread_mutex_unlock(&ph->lock);
 }
 
 void p_probes(struct probe_history* ph, _Bool verbose, char* ssid, uint8_t* mac){
