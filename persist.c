@@ -10,9 +10,11 @@ void dump_probe_history(struct probe_history* ph, FILE* fp){
     struct mac_addr* ma;
     int notelen;
     int ps_len;
+    int fingerprint = sizeof(struct mac_addr) + sizeof(struct probe_storage) + sizeof(time_t);
 
     pthread_mutex_lock(&ph->lock);
     pthread_mutex_lock(&ph->file_storage_lock);
+    fwrite(&fingerprint, sizeof(int), 1, fp);
     for(int i = 0; i < (0xff*6)+1; ++i){
         if((ma = ph->buckets[i])){
             for(; ma; ma = ma->next){
@@ -45,31 +47,37 @@ int time_t_comparator(const void* x, const void* y){
     return *((time_t*)x) > *((time_t*)y);
 }
 
-void load_probe_history(struct probe_history* ph, FILE* fp){
+/* we should be able to detect invalid files */
+int load_probe_history(struct probe_history* ph, FILE* fp){
     uint8_t addr[6];
     char ssid[32], * note;
     int notelen, ps_len, n_probes, probes_removed = 0;
     time_t probe_time;
     struct probe_storage* ps;
+    int n_inserted = 0;
+    int fingerprint;
 
     pthread_mutex_lock(&ph->file_storage_lock);
 
+    if(fread(&fingerprint, sizeof(int), 1, fp) != 1 || 
+        fingerprint != (sizeof(struct mac_addr) + sizeof(struct probe_storage) + sizeof(time_t)))goto EXIT;
     while(fread(addr, 1, 6, fp) == 6){
-        fread(&notelen, sizeof(int), 1, fp);
+        if(fread(&notelen, sizeof(int), 1, fp) != 1)goto EXIT;
         if(notelen){
             note = malloc(notelen);
-            fread(note, 1, notelen, fp);
+            if((int)fread(note, 1, notelen, fp) != notelen)goto EXIT;
         }
         fread(&ps_len, sizeof(int), 1, fp);
         for(int i = 0; i < ps_len; ++i){
-            fread(ssid, 1, 32, fp);
-            fread(&n_probes, sizeof(int), 1, fp);
+            if(fread(ssid, 1, 32, fp) != 32)goto EXIT;
+            if(fread(&n_probes, sizeof(int), 1, fp) != 1)goto EXIT;
             for(int j = 0; j < n_probes; ++j){
-                fread(&probe_time, sizeof(time_t), 1, fp);
+                if(fread(&probe_time, sizeof(time_t), 1, fp) != 1)goto EXIT;
                 /* this pointer is used for sorting after all probes have been inserted
                  * this pointer should be identical with each iteration
                  */
                 ps = insert_probe_request(ph, addr, ssid, probe_time);
+                ++n_inserted;
             }
             /* after reading all probes for a given mac/ssid pair,
              * it's time to sort/remove duplicates
@@ -94,6 +102,7 @@ void load_probe_history(struct probe_history* ph, FILE* fp){
         /* done after our iteration to ensure that fields exist */
         if(notelen)add_note(ph, addr, note);
     }
+    EXIT:
 
     pthread_mutex_unlock(&ph->file_storage_lock);
 
@@ -101,6 +110,8 @@ void load_probe_history(struct probe_history* ph, FILE* fp){
     pthread_mutex_lock(&ph->lock);
     ph->total_probes -= probes_removed;
     pthread_mutex_unlock(&ph->lock);
+
+    return n_inserted-probes_removed;
 }
 
 #if 0
