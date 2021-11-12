@@ -37,6 +37,8 @@ struct mac_addr{
 
 
 
+    //struct mac_addr** mac_stack_placement;
+    int mac_stack_idx;
     _Bool in_mac_stack;
 
     struct mac_addr* next;
@@ -52,6 +54,9 @@ struct mac_stack{
     pthread_mutex_t lock;
     int n_most_recent, n_stored;
     struct mac_stack_entry* first, * last;
+    //struct mac_addr** ins_ptr, ** prev_ins;
+    int ins_idx;
+    struct mac_addr** addrs;
 };
 
 struct probe_history{
@@ -81,3 +86,6 @@ struct mac_addr* lookup_mac(struct probe_history* ph, uint8_t* mac);
  * once we find the specific mac addr, we needd to keep track
  * of the recent probes and ssids
 */
+void init_mac_stack(struct mac_stack* ms, int n_most_recent);
+void insert_mac_stack_(struct mac_stack* ms, struct mac_addr* ma);
+void p_n_most_recent(struct mac_stack* ms, int n);
