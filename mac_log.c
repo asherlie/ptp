@@ -7,6 +7,14 @@
 
 #include "mac_log.h"
 
+#define ANSI_RED     "\x1b[31m"
+#define ANSI_GREEN   "\x1b[32m"
+#define ANSI_YELLOW  "\x1b[33m"
+#define ANSI_BLUE    "\x1b[34m"
+#define ANSI_MAGENTA "\x1b[35m"
+#define ANSI_CYAN    "\x1b[36m"
+#define ANSI_RESET   "\x1b[0m"
+
 void init_mac_stack(struct mac_stack* ms, int n_most_recent){
     assert(n_most_recent > 1);
     pthread_mutex_init(&ms->lock, NULL);
@@ -14,6 +22,97 @@ void init_mac_stack(struct mac_stack* ms, int n_most_recent){
     ms->n_stored = 0;
 
     ms->first = ms->last = NULL;
+    ms->ins_idx = 0;
+    /*ms->prev_ins = ms->ins_ptr =*/ ms->addrs = calloc(sizeof(struct mac_addr*), n_most_recent);
+}
+
+int prev_idx(struct mac_stack* ms, int idx){
+    int ret = idx-1;
+    if(ret >= 0)return ret;
+    return ms->n_most_recent-1;
+}
+
+void insert_mac_stack_(struct mac_stack* ms, struct mac_addr* ma){
+    /* test only works with this enabled, fix the logic so this doesn't have to be so */
+    /*if(ms->ins_idx == ma->mac_stack_idx)return;*/
+    /* if in mac stack, move to front, shift everything else over */
+    /*ms->prev_ins = ms->ins_ptr;*/
+    /*if(ma->mac_stack_placement){*/
+    pthread_mutex_lock(&ms->lock);
+
+    /* if this ma is already in our mac stack but not in ind 0 we need to
+     * move it to the beginning and shift all other entries over by one
+     */
+    
+    /*if(ma->mac_stack_idx != -1 && ma->mac_stack_idx != ms->ins_idx){*/
+    /*if mac stack idx == prev, */
+    if(ma->mac_stack_idx != -1 && ma->mac_stack_idx !=  ms->ins_idx){
+    /*if(ma->mac_stack_idx != -1 && ma->mac_stack_idx != prev_idx(ms, ms->ins_idx)){*/
+        /* nothing new here, rewinding insertion index */
+        ms->ins_idx = prev_idx(ms, ms->ins_idx);
+        _Bool wrap = ma->mac_stack_idx > ms->ins_idx;
+        if(wrap){
+            /*omg... this invalidates all of the stored indices*/
+            struct mac_addr* tmp_m = *ms->addrs;
+            /*memmove(ms->addrs, ms->addrs+ms->ins_idx, ms->ins_idx*sizeof(struct mac_addr*));*/
+            /* trying the below - shift by ONE */
+            memmove(ms->addrs, ms->addrs+1, ms->ins_idx*sizeof(struct mac_addr*));
+            /*memmove(ms->addrs+ma->mac_stack_idx, ms->addrs+ms->n_most_recent-1, ms->n_most_recent-idx-1);*/
+            /*hmm - this is invalid when ma->mac_stack_idx == n_most_recent-1*/
+            memmove(ms->addrs+ma->mac_stack_idx, ms->addrs+ms->n_most_recent-1, ms->n_most_recent-ms->ins_idx-1);
+            ms->addrs[ms->n_most_recent-1] = tmp_m;
+        }
+        else{
+            memmove(ms->addrs+ma->mac_stack_idx, ms->addrs+ms->ins_idx, (ms->ins_idx-ma->mac_stack_idx)*sizeof(struct mac_addr*));
+        }
+        for(int i = 0; i < ms->n_most_recent; ++i){
+            ms->addrs[i]->mac_stack_idx = i;
+        }
+    }
+
+
+    /*this logic is no longer good*/
+    if(0 && ma->mac_stack_idx > 0){
+
+        /* should this always be enabled? */
+        if(0)memmove(ms->addrs+1, ms->addrs, sizeof(struct mac_addr*)*(ms->n_most_recent-ma->mac_stack_idx-1));
+        /**ms->addrs = ma;*/
+
+        /*next we need to copy elements after*/
+        /*ma-*/
+    }
+    /* if we're overwriting an entry, fully remove it from ms */
+    if(ms->addrs[ms->ins_idx])
+        ms->addrs[ms->ins_idx]->mac_stack_idx = -1;
+
+    ms->addrs[ms->ins_idx] = ma;
+    ma->mac_stack_idx = ms->ins_idx;
+
+    if(++ms->ins_idx == ms->n_most_recent){
+        ms->ins_idx = 0;
+    }
+    /**ms->ins_ptr = ma;*/
+    /*ma->mac_stack_placement = ms->ins_ptr;*/
+    /*
+     * ins = 2
+     * [0, 1, 2, 3, 4, 5]
+    */
+    /*when printing most recent, we start at ins_ptr*/
+    /*
+     * if(ms->ins_ptr-ms->addrs == ms->n_most_recent){
+     *     ms->ins_ptr = ms->addrs;
+     * }
+    */
+    pthread_mutex_unlock(&ms->lock);
+}
+
+void p_n_most_recent(struct mac_stack* ms, int n){
+    int c = 0;
+    puts("no most recent:");
+    for(int i = prev_idx(ms, ms->ins_idx); ms->addrs[i] && c != n; i = prev_idx(ms, i)){
+        printf("  %i\n", ms->addrs[i]->addr[0]);
+        ++c;
+    }
 }
 
 void insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
@@ -78,6 +177,7 @@ struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
     struct mac_addr* new_entry = malloc(sizeof(struct mac_addr));
  
     memcpy(new_entry->addr, mac_addr, 6);
+    new_entry->mac_stack_idx = -1;
     new_entry->in_mac_stack = 0;
     new_entry->next = NULL;
     new_entry->notes = NULL;
@@ -312,7 +412,7 @@ void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* ssid, char* 
 
     if(prepend)fputs(prepend, stdout);
     
-    printf("%i probes to \"%s\"\n", ps->n_probes, ps->ssid);
+    printf("%s%i%s probes to \"%s\"\n", ANSI_BLUE, ps->n_probes, ANSI_RESET, ps->ssid);
 
     if(!verbose){
         if(prepend)fputs(prepend, stdout);
@@ -347,8 +447,8 @@ void p_mac_addr_probe(struct mac_addr* ma, _Bool p_timestamps, char* ssid, uint8
 
     if(!ssid_match || (mac && memcmp(ma->addr, mac, 6)))return;
     /* how do i not print this in case of non-matching ssid? */
-    printf("%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:\n", ma->addr[0], ma->addr[1],
-           ma->addr[2], ma->addr[3], ma->addr[4], ma->addr[5]);
+    printf("%s%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX%s:\n", ANSI_GREEN, ma->addr[0], ma->addr[1],
+           ma->addr[2], ma->addr[3], ma->addr[4], ma->addr[5], ANSI_RESET);
     if(ma->notes)printf("  notes: %s\n", ma->notes);
 
     for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
