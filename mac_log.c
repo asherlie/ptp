@@ -19,11 +19,9 @@ void init_mac_stack(struct mac_stack* ms, int n_most_recent){
     assert(n_most_recent > 1);
     pthread_mutex_init(&ms->lock, NULL);
     ms->n_most_recent = n_most_recent;
-    ms->n_stored = 0;
 
-    ms->first = ms->last = NULL;
     ms->ins_idx = 0;
-    /*ms->prev_ins = ms->ins_ptr =*/ ms->addrs = calloc(sizeof(struct mac_addr*), n_most_recent);
+    ms->addrs = calloc(sizeof(struct mac_addr*), n_most_recent);
 }
 
 int prev_idx(struct mac_stack* ms, int idx){
@@ -32,33 +30,17 @@ int prev_idx(struct mac_stack* ms, int idx){
     return ms->n_most_recent-1;
 }
 
-void insert_mac_stack_(struct mac_stack* ms, struct mac_addr* ma){
-    /* test only works with this enabled, fix the logic so this doesn't have to be so */
-    /*if(ms->ins_idx == ma->mac_stack_idx)return;*/
-    /* if in mac stack, move to front, shift everything else over */
-    /*ms->prev_ins = ms->ins_ptr;*/
-    /*if(ma->mac_stack_placement){*/
+void insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
     pthread_mutex_lock(&ms->lock);
 
-    /* if this ma is already in our mac stack but not in ind 0 we need to
-     * move it to the beginning and shift all other entries over by one
-     */
-    
-    /*if(ma->mac_stack_idx != -1 && ma->mac_stack_idx != ms->ins_idx){*/
-    /*if mac stack idx == prev, */
     if(ma->mac_stack_idx != -1 && ma->mac_stack_idx !=  ms->ins_idx){
-    /*if(ma->mac_stack_idx != -1 && ma->mac_stack_idx != prev_idx(ms, ms->ins_idx)){*/
         /* nothing new here, rewinding insertion index */
         ms->ins_idx = prev_idx(ms, ms->ins_idx);
         _Bool wrap = ma->mac_stack_idx > ms->ins_idx;
         if(wrap){
-            /*omg... this invalidates all of the stored indices*/
+            /* this invalidates all of the stored indices */
             struct mac_addr* tmp_m = *ms->addrs;
-            /*memmove(ms->addrs, ms->addrs+ms->ins_idx, ms->ins_idx*sizeof(struct mac_addr*));*/
-            /* trying the below - shift by ONE */
             memmove(ms->addrs, ms->addrs+1, ms->ins_idx*sizeof(struct mac_addr*));
-            /*memmove(ms->addrs+ma->mac_stack_idx, ms->addrs+ms->n_most_recent-1, ms->n_most_recent-idx-1);*/
-            /*hmm - this is invalid when ma->mac_stack_idx == n_most_recent-1*/
             memmove(ms->addrs+ma->mac_stack_idx, ms->addrs+ms->n_most_recent-1, ms->n_most_recent-ms->ins_idx-1);
             ms->addrs[ms->n_most_recent-1] = tmp_m;
         }
@@ -70,17 +52,6 @@ void insert_mac_stack_(struct mac_stack* ms, struct mac_addr* ma){
         }
     }
 
-
-    /*this logic is no longer good*/
-    if(0 && ma->mac_stack_idx > 0){
-
-        /* should this always be enabled? */
-        if(0)memmove(ms->addrs+1, ms->addrs, sizeof(struct mac_addr*)*(ms->n_most_recent-ma->mac_stack_idx-1));
-        /**ms->addrs = ma;*/
-
-        /*next we need to copy elements after*/
-        /*ma-*/
-    }
     /* if we're overwriting an entry, fully remove it from ms */
     if(ms->addrs[ms->ins_idx])
         ms->addrs[ms->ins_idx]->mac_stack_idx = -1;
@@ -91,59 +62,16 @@ void insert_mac_stack_(struct mac_stack* ms, struct mac_addr* ma){
     if(++ms->ins_idx == ms->n_most_recent){
         ms->ins_idx = 0;
     }
-    /**ms->ins_ptr = ma;*/
-    /*ma->mac_stack_placement = ms->ins_ptr;*/
-    /*
-     * ins = 2
-     * [0, 1, 2, 3, 4, 5]
-    */
-    /*when printing most recent, we start at ins_ptr*/
-    /*
-     * if(ms->ins_ptr-ms->addrs == ms->n_most_recent){
-     *     ms->ins_ptr = ms->addrs;
-     * }
-    */
     pthread_mutex_unlock(&ms->lock);
 }
 
 void p_n_most_recent(struct mac_stack* ms, int n){
     int c = 0;
-    puts("no most recent:");
+    puts("n most recent:");
     for(int i = prev_idx(ms, ms->ins_idx); ms->addrs[i] && c != n; i = prev_idx(ms, i)){
         printf("  %i\n", ms->addrs[i]->addr[0]);
         ++c;
     }
-}
-
-void insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
-    struct mac_stack_entry* mse;
-
-    if(ma->in_mac_stack)return;
-    ma->in_mac_stack = 1;
-
-    pthread_mutex_lock(&ms->lock);
-
-    if(ms->n_stored == ms->n_most_recent){
-        mse = ms->last;
-        ms->last = ms->last->prev;
-        ms->last->next = NULL;
-        mse->prev = NULL;
-        mse->next = ms->first;
-        ms->first->prev = mse;
-        ms->first = mse;
-    }
-    else{
-        mse = calloc(1, sizeof(struct mac_stack_entry));
-        mse->m_addr = ma;
-        if(!ms->first)ms->first = ms->last = mse;
-        else{
-            mse->next = ms->first;
-            ms->first->prev = mse;
-            ms->first = mse;
-        }
-    }
-    mse->m_addr = ma;
-    pthread_mutex_unlock(&ms->lock);
 }
 
 void init_probe_history(struct probe_history* ph){
@@ -178,7 +106,6 @@ struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
  
     memcpy(new_entry->addr, mac_addr, 6);
     new_entry->mac_stack_idx = -1;
-    new_entry->in_mac_stack = 0;
     new_entry->next = NULL;
     new_entry->notes = NULL;
     new_entry->probes = NULL;
@@ -400,7 +327,7 @@ TODO - in the meantime before a working probe collector is written, i can spoof 
  */
 
 /*
- * TODO: have boolean arg that determines whether to use relative time mode - subtract from current time
+ * TODO: HAVE BOOLEAN ARG THAT DETERMINES WHETHER TO USE RELATIVE TIME MODE - SUBTRACT FROM CURRENT TIME
  * this as well as the mac stack should be finished today
  * mac stack can be simplified greatly
 */
