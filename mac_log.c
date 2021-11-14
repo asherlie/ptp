@@ -4,6 +4,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <ctype.h>
 
 #include "mac_log.h"
 
@@ -217,6 +218,9 @@ struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac
 _Bool add_note(struct probe_history* ph, uint8_t addr[6], char* note){
     struct mac_addr* ma;
 
+    for(char* i = note; *i; ++i)
+        *i = toupper(*i);
+
     pthread_mutex_lock(&ph->lock);
 
     ma = ph->buckets[sum_mac_addr(addr)];
@@ -336,7 +340,7 @@ void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* ssid, char* 
 
     if(prepend)fputs(prepend, stdout);
     
-    printf("%s%i%s probes to \"%s\"\n", ANSI_BLUE, ps->n_probes, ANSI_RESET, ps->ssid);
+    printf("%s%i%s probes to \"%s%s%s\"\n", ANSI_BLUE, ps->n_probes, ANSI_RESET, ANSI_RED, ps->ssid, ANSI_RESET);
 
     if(!verbose){
         if(prepend)fputs(prepend, stdout);
@@ -373,7 +377,7 @@ void p_mac_addr_probe(struct mac_addr* ma, _Bool p_timestamps, char* ssid, uint8
     /* how do i not print this in case of non-matching ssid? */
     printf("%s%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX:%.2hhX%s:\n", ANSI_GREEN, ma->addr[0], ma->addr[1],
            ma->addr[2], ma->addr[3], ma->addr[4], ma->addr[5], ANSI_RESET);
-    if(ma->notes)printf("  notes: %s\n", ma->notes);
+    if(ma->notes)printf("  notes: %s%s%s\n", ANSI_MAGENTA, ma->notes, ANSI_RESET);
 
     for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
         p_probe_storage(ps, p_timestamps, ssid, "  ");

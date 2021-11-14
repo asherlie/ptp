@@ -343,6 +343,14 @@ void handle_command(char* cmd, struct probe_history* ph){
             break;
         /* [f]ind - search by note */
         case 'f':
+            /* TODO: should p_probes assume that note arg can be altered
+             * if so, we can do the uppercase conversion at the beginning
+             * of p_probes()
+             */
+            if(args[1]){
+                for(char* i = args[1]; *i; ++i)
+                    *i = toupper(*i);
+            }
             p_probes(ph, args[2], args[1], NULL, NULL);
             break;
     }
