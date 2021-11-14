@@ -32,12 +32,53 @@ int prev_idx(struct mac_stack* ms, int idx){
 
 void insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
     pthread_mutex_lock(&ms->lock);
+    /* first handle pre-existing ma */
+    if(ma->mac_stack_idx != -1){
+        /* if it's already at the top of the stack */
+        if(ma->mac_stack_idx == ms->ins_idx-1)goto EXIT;
+        
+        #if 0
+        [a, b, c, d, e, f]
+                        ^ ins idx-1
+            ^ original index
+        inserting b
+        memmove(dest, src, sz);
+        memmove(original_idx, ins_idx-1, ins_idx-original_idx);
+        #endif
+        /*memmove(ms->addrs+ma->mac_stack_idx, ms->addrs+ms->ins_idx-1, (ms->ins_idx-ma->mac_stack_idx)*sizeof(struct mac_addr*));*/
+        for(int i = ma->mac_stack_idx; i < ms->ins_idx-1; ++i){
+            ms->addrs[i] = ms->addrs[i+1];
+            --ms->addrs[i]->mac_stack_idx;
+        }
+        ms->addrs[ms->ins_idx-1] = ma;
+        ma->mac_stack_idx = ms->ins_idx-1;
+        goto EXIT;
+    }
+    
+    /* if we have no space, move everything over  */
+    if(ms->ins_idx == ms->n_most_recent){
+        for(int i = 0; i < ms->ins_idx-1; ++i){
+            ms->addrs[i] = ms->addrs[i+1];
+            --ms->addrs[i]->mac_stack_idx;
+        }
+        ms->addrs[ms->ins_idx-1] = ma;
+        ma->mac_stack_idx = ms->ins_idx-1;
+    }
+    else ms->addrs[(ma->mac_stack_idx = ms->ins_idx++)] = ma;
+
+    EXIT:
+    pthread_mutex_unlock(&ms->lock);
+}
+
+void _insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
+    pthread_mutex_lock(&ms->lock);
 
     if(ma->mac_stack_idx != -1 && ma->mac_stack_idx !=  ms->ins_idx){
         /* nothing new here, rewinding insertion index */
         ms->ins_idx = prev_idx(ms, ms->ins_idx);
         _Bool wrap = ma->mac_stack_idx > ms->ins_idx;
         if(wrap){
+            puts("WRAAAPAPPAPAPA");
             /* this invalidates all of the stored indices */
             struct mac_addr* tmp_m = *ms->addrs;
             memmove(ms->addrs, ms->addrs+1, ms->ins_idx*sizeof(struct mac_addr*));
@@ -45,10 +86,14 @@ void insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
             ms->addrs[ms->n_most_recent-1] = tmp_m;
         }
         else{
+            /*
+             * this could be it? hmmm - i'm copying null entries in somehow NOT occurring with wraps
+             * not sure though
+            */
             memmove(ms->addrs+ma->mac_stack_idx, ms->addrs+ms->ins_idx, (ms->ins_idx-ma->mac_stack_idx)*sizeof(struct mac_addr*));
         }
         for(int i = 0; i < ms->n_most_recent; ++i){
-            ms->addrs[i]->mac_stack_idx = i;
+            if(ms->addrs[i])ms->addrs[i]->mac_stack_idx = i;
         }
     }
 
@@ -63,15 +108,6 @@ void insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
         ms->ins_idx = 0;
     }
     pthread_mutex_unlock(&ms->lock);
-}
-
-void p_n_most_recent(struct mac_stack* ms, int n){
-    int c = 0;
-    puts("n most recent:");
-    for(int i = prev_idx(ms, ms->ins_idx); ms->addrs[i] && c != n; i = prev_idx(ms, i)){
-        printf("  %i\n", ms->addrs[i]->addr[0]);
-        ++c;
-    }
 }
 
 void init_probe_history(struct probe_history* ph){
@@ -385,15 +421,32 @@ void p_mac_addr_probe(struct mac_addr* ma, _Bool p_timestamps, char* ssid, uint8
 
 /*void p_most_recent(struct mac_stack* ms, int n){*/
 void p_most_recent(struct probe_history* ph, int n){
-    int i = 0;
+    int c = 0;
     
     pthread_mutex_lock(&ph->lock);
     pthread_mutex_lock(&ph->ms.lock);
-    for(struct mac_stack_entry* mse = ph->ms.first; mse; mse = mse->next){
-        ++i;
-        /* TODO: enable both ssid and mac filters */
-        p_mac_addr_probe(mse->m_addr, 0, NULL, NULL);
-        if(i == n)break;
+
+#if 0
+    printf("some context:\n  %i, %i\n", ph->ms.ins_idx, ph->ms.n_most_recent);
+    /*
+     * hmm this printing of the array shows the problem, internal nodes are being overwritten, WEIRD!
+     * this causes the iteration to be cut short
+     * probably this is due to memcpying frm beyond where we should be
+    */
+    for(int i = 0; i < ph->ms.n_most_recent; ++i){
+        printf("  %i, ", (_Bool)ph->ms.addrs[i]);
+        /*printf("  %i:%i, ", ph->ms.addrs[i]->addr[0], ph->ms.addrs[i]->addr[1]);*/
+    }
+    puts("");
+    for(int i = prev_idx(&ph->ms, ph->ms.ins_idx); ph->ms.addrs[i] && c != n; i = prev_idx(&ph->ms, i)){
+        ++c;
+        p_mac_addr_probe(ph->ms.addrs[i], 0, NULL, NULL);
+    }
+
+#endif
+    for(int i = ph->ms.ins_idx-1; i >= 0 && c != n; --i){
+        p_mac_addr_probe(ph->ms.addrs[i], 0, NULL, NULL);
+        ++c;
     }
     pthread_mutex_unlock(&ph->ms.lock);
     pthread_mutex_unlock(&ph->lock);

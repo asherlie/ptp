@@ -17,44 +17,14 @@ struct mac_addr{
     char* notes;
     struct probe_storage* probes;
 
-    #if 0
-    /* to avoid iterating through n_most_recent with each insertion */
-    this should be an integer for position in line - but damn, this is a linked freaking list
-    i could also keep a struct mac_stack_entry*[] with a list of mac stack entries
-    ridiculous LOL
-    this should be aa
-    
-    nvm - this is what i should do - scrap the linked list. this should be an array
-    arr[20]
-    and keep a pointer to the first element
-    and the last element
-    or first element and its index
-    when iterating, start from first, go to last, go from base pointer to first 
-    if we have come across a mac address that has the in_mac_stack marked as 1
-    in_mac_stack keeps track of the pointer
-    i can memcpy
-    #endif
-
-
-
-    //struct mac_addr** mac_stack_placement;
     int mac_stack_idx;
-    _Bool in_mac_stack;
 
     struct mac_addr* next;
 };
 
-/* used to store n most recently received struct mac_addrs */
-struct mac_stack_entry{
-    struct mac_addr* m_addr;
-    struct mac_stack_entry* next, * prev;
-};
-
 struct mac_stack{
     pthread_mutex_t lock;
-    int n_most_recent, n_stored;
-    struct mac_stack_entry* first, * last;
-    //struct mac_addr** ins_ptr, ** prev_ins;
+    int n_most_recent;
     int ins_idx;
     struct mac_addr** addrs;
 };
@@ -88,4 +58,3 @@ struct mac_addr* lookup_mac(struct probe_history* ph, uint8_t* mac);
 */
 void init_mac_stack(struct mac_stack* ms, int n_most_recent);
 void insert_mac_stack_(struct mac_stack* ms, struct mac_addr* ma);
-void p_n_most_recent(struct mac_stack* ms, int n);

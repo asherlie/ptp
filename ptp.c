@@ -339,11 +339,7 @@ void handle_command(char* cmd, struct probe_history* ph){
             break;
         /* [r]ecent - prints the n mots recent probes */
         case 'r':
-            if(!args[1]){
-                puts("please provide an integer");
-                break;
-            }
-            p_most_recent(ph, atoi(args[1]));
+            p_most_recent(ph, args[1] ? atoi(args[1]) : 1);
             break;
     }
 }
