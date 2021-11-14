@@ -24,10 +24,11 @@ void init_mac_stack(struct mac_stack* ms, int n_most_recent){
     ms->addrs = calloc(sizeof(struct mac_addr*), n_most_recent);
 }
 
-int prev_idx(struct mac_stack* ms, int idx){
-    int ret = idx-1;
-    if(ret >= 0)return ret;
-    return ms->n_most_recent-1;
+void free_mac_stack(struct mac_stack* ms){
+    pthread_mutex_lock(&ms->lock);
+    free(ms->addrs);
+    pthread_mutex_unlock(&ms->lock);
+    pthread_mutex_destroy(&ms->lock);
 }
 
 void insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
@@ -67,46 +68,6 @@ void insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
     else ms->addrs[(ma->mac_stack_idx = ms->ins_idx++)] = ma;
 
     EXIT:
-    pthread_mutex_unlock(&ms->lock);
-}
-
-void _insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
-    pthread_mutex_lock(&ms->lock);
-
-    if(ma->mac_stack_idx != -1 && ma->mac_stack_idx !=  ms->ins_idx){
-        /* nothing new here, rewinding insertion index */
-        ms->ins_idx = prev_idx(ms, ms->ins_idx);
-        _Bool wrap = ma->mac_stack_idx > ms->ins_idx;
-        if(wrap){
-            puts("WRAAAPAPPAPAPA");
-            /* this invalidates all of the stored indices */
-            struct mac_addr* tmp_m = *ms->addrs;
-            memmove(ms->addrs, ms->addrs+1, ms->ins_idx*sizeof(struct mac_addr*));
-            memmove(ms->addrs+ma->mac_stack_idx, ms->addrs+ms->n_most_recent-1, ms->n_most_recent-ms->ins_idx-1);
-            ms->addrs[ms->n_most_recent-1] = tmp_m;
-        }
-        else{
-            /*
-             * this could be it? hmmm - i'm copying null entries in somehow NOT occurring with wraps
-             * not sure though
-            */
-            memmove(ms->addrs+ma->mac_stack_idx, ms->addrs+ms->ins_idx, (ms->ins_idx-ma->mac_stack_idx)*sizeof(struct mac_addr*));
-        }
-        for(int i = 0; i < ms->n_most_recent; ++i){
-            if(ms->addrs[i])ms->addrs[i]->mac_stack_idx = i;
-        }
-    }
-
-    /* if we're overwriting an entry, fully remove it from ms */
-    if(ms->addrs[ms->ins_idx])
-        ms->addrs[ms->ins_idx]->mac_stack_idx = -1;
-
-    ms->addrs[ms->ins_idx] = ma;
-    ma->mac_stack_idx = ms->ins_idx;
-
-    if(++ms->ins_idx == ms->n_most_recent){
-        ms->ins_idx = 0;
-    }
     pthread_mutex_unlock(&ms->lock);
 }
 
