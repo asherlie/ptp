@@ -7,6 +7,7 @@
 #include <ctype.h>
 
 #include "mac_log.h"
+#include "persist.h"
 
 #define ANSI_RED     "\x1b[31m"
 #define ANSI_GREEN   "\x1b[32m"
@@ -72,7 +73,7 @@ void insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
     pthread_mutex_unlock(&ms->lock);
 }
 
-void init_probe_history(struct probe_history* ph){
+void init_probe_history(struct probe_history* ph, char* fn){
     pthread_mutex_init(&ph->lock, NULL);
     pthread_mutex_init(&ph->file_storage_lock, NULL);
     ph->unique_addresses = 0;
@@ -81,6 +82,11 @@ void init_probe_history(struct probe_history* ph){
         ph->buckets[i] = NULL;
     }
     init_mac_stack(&ph->ms, 20);
+
+    if(fn){
+        ph->offload_fn = fn;
+        ph->offload_after = 5;
+    }
 }
 
 int sum_mac_addr(uint8_t mac_addr[6]){
@@ -137,6 +143,7 @@ struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac
     struct mac_addr** bucket, * prev_bucket, * ready_bucket;
     struct probe_storage* ps;
     _Bool found_bucket = 0;
+    FILE* offload_fp;
 
     pthread_mutex_lock(&ph->lock);
 
@@ -208,9 +215,21 @@ struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac
 
     ph->total_probes += insert_probe(ps, timestamp);
 
+    /* setting offload_fp here while we have ph->lock acquired
+     * if this is NULL in case of no offload_fn or not enough
+     * of a difference since the last offload
+     * we'll skip the dump for this insertion
+     */
+    offload_fp = (ph->offload_fn && !(ph->total_probes % ph->offload_after)) ? fopen(ph->offload_fn, "w") : NULL;
+
     pthread_mutex_unlock(&ph->lock);
 
     insert_mac_stack(&ph->ms, ready_bucket);
+
+    if(offload_fp){
+        dump_probe_history(ph, offload_fp);
+        fclose(offload_fp);
+    }
 
     return ps;
 }

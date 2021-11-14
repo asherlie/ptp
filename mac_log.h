@@ -40,9 +40,12 @@ struct probe_history{
     struct mac_stack ms;
 
     int unique_addresses, total_probes;
+
+    int offload_after;
+    char* offload_fn;
 };
 
-void init_probe_history(struct probe_history* ph);
+void init_probe_history(struct probe_history* ph, char* fn);
 struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32], time_t timestamp);
 _Bool add_note(struct probe_history* ph, uint8_t addr[6], char* note);
 void p_probes(struct probe_history* ph, _Bool verbose, char* note, char* ssid, uint8_t* mac);
