@@ -387,33 +387,16 @@ void p_most_recent(struct probe_history* ph, int n){
     pthread_mutex_lock(&ph->lock);
     pthread_mutex_lock(&ph->ms.lock);
 
-#if 0
-    printf("some context:\n  %i, %i\n", ph->ms.ins_idx, ph->ms.n_most_recent);
-    /*
-     * hmm this printing of the array shows the problem, internal nodes are being overwritten, WEIRD!
-     * this causes the iteration to be cut short
-     * probably this is due to memcpying frm beyond where we should be
-    */
-    for(int i = 0; i < ph->ms.n_most_recent; ++i){
-        printf("  %i, ", (_Bool)ph->ms.addrs[i]);
-        /*printf("  %i:%i, ", ph->ms.addrs[i]->addr[0], ph->ms.addrs[i]->addr[1]);*/
-    }
-    puts("");
-    for(int i = prev_idx(&ph->ms, ph->ms.ins_idx); ph->ms.addrs[i] && c != n; i = prev_idx(&ph->ms, i)){
-        ++c;
-        p_mac_addr_probe(ph->ms.addrs[i], 0, NULL, NULL);
-    }
-
-#endif
     for(int i = ph->ms.ins_idx-1; i >= 0 && c != n; --i){
         p_mac_addr_probe(ph->ms.addrs[i], 0, NULL, NULL);
         ++c;
     }
+
     pthread_mutex_unlock(&ph->ms.lock);
     pthread_mutex_unlock(&ph->lock);
 }
 
-void p_probes(struct probe_history* ph, _Bool verbose, char* ssid, uint8_t* mac){
+void p_probes(struct probe_history* ph, _Bool verbose, char* note, char* ssid, uint8_t* mac){
     struct mac_addr* ma;
 
     pthread_mutex_lock(&ph->lock);
@@ -421,6 +404,7 @@ void p_probes(struct probe_history* ph, _Bool verbose, char* ssid, uint8_t* mac)
     for(int i = 0; i < (0xff*6)+1; ++i){
         if((ma = ph->buckets[i])){
             for(; ma; ma = ma->next){
+                if(!note || (ma->notes && strstr(ma->notes, note)))
                 p_mac_addr_probe(ma, verbose, ssid, mac);
             }
         }
@@ -456,6 +440,7 @@ void free_probe_history(struct probe_history* ph){
     }
     pthread_mutex_destroy(&ph->lock);
     pthread_mutex_destroy(&ph->file_storage_lock);
+    free_mac_stack(&ph->ms);
 }
 
 struct mac_addr* lookup_mac(struct probe_history* ph, uint8_t* mac){

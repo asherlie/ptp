@@ -307,14 +307,14 @@ void handle_command(char* cmd, struct probe_history* ph){
         case 'a':{
             uint8_t mac[6] = {0};
             parse_maddr(args[1], mac);
-            p_probes(ph, 1, args[2], mac);
+            p_probes(ph, 1, NULL, args[2], mac);
             break;
         }
         /*ssid command - addr (ssid)?*/
         case 's':{
             uint8_t mac[6] = {0};
             parse_maddr(args[2], mac);
-            p_probes(ph, 1, args[1], parse_maddr(args[2], mac) ? mac : NULL);
+            p_probes(ph, 1, NULL, args[1], parse_maddr(args[2], mac) ? mac : NULL);
             break;
         }
         /* [n]ote */
@@ -328,7 +328,7 @@ void handle_command(char* cmd, struct probe_history* ph){
         }
         /* [p]rint */
         case 'p':
-            p_probes(ph, args[1], NULL, NULL);
+            p_probes(ph, args[1], NULL, NULL, NULL);
             break;
         /* [d]istinct */
         /* [d]ata */
@@ -340,6 +340,10 @@ void handle_command(char* cmd, struct probe_history* ph){
         /* [r]ecent - prints the n mots recent probes */
         case 'r':
             p_most_recent(ph, args[1] ? atoi(args[1]) : 1);
+            break;
+        /* [f]ind - search by note */
+        case 'f':
+            p_probes(ph, args[2], args[1], NULL, NULL);
             break;
     }
 }
@@ -408,7 +412,7 @@ int main(int a, char** b){
     while(1){
         usleep(1000000);
         printf("\r%i", ph.unique_addresses);
-        p_probes(&ph, 1, NULL, NULL);
+        p_probes(&ph, 1, NULL, NULL, NULL);
         fflush(stdout);
     }
     pthread_join(pth[0], NULL);
