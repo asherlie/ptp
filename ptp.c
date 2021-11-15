@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <signal.h>
 
 #include <pcap.h>
 
@@ -14,6 +15,12 @@
 #include "mac_log.h"
 #include "persist.h"
 #include "mq.h"
+
+/* these are set to ph lock and file storage lock
+ * and are used to ensure a safe exit so that
+ * offload files aren't corrupted
+ */
+pthread_mutex_t* exit_locks[2];
 
 /*
  * repl, thread to collect packets and add them to queue
@@ -320,9 +327,19 @@ void handle_command(char* cmd, struct probe_history* ph){
         /* [n]ote */
         case 'n':{
             uint8_t mac[6] = {0};
+            FILE* fp = NULL;
             parse_maddr(args[1], mac);
-            if(add_note(ph, mac, args[2] ? strdup(args[2]) : NULL))
+            if(add_note(ph, mac, args[2] ? strdup(args[2]) : NULL)){
+                /* TODO: what if this occurs during a routine offload
+                 * can i have two file pointers open at once
+                 * should be totally fine because of file_storage_lock
+                 * we don't do any ACTUAL writing unless this is acquired
+                 */
                 printf("added note to %s\n", args[1]);
+                if(ph->offload_fn && (fp = fopen(ph->offload_fn, "w"))){
+                    dump_probe_history(ph, fp);
+                }
+            }
             else puts("failed to find matching MAC address");
             break;
         }
@@ -352,6 +369,9 @@ void handle_command(char* cmd, struct probe_history* ph){
                     *i = toupper(*i);
             }
             p_probes(ph, args[2], args[1], NULL, NULL);
+            break;
+        /* [o]ldest */
+        case 'o':
             break;
     }
 }
@@ -388,10 +408,21 @@ void repl(struct probe_history* ph){
     }
     (void)ph;
 }
-/*
- * void* repl_thread(){
- * }
-*/
+
+void wait_to_exit(int sig){
+    (void)sig;
+    
+    printf("waiting to acquire locks in case of dump_probe_history()...");
+
+    fflush(stdout);
+
+    pthread_mutex_lock(exit_locks[0]);
+    pthread_mutex_lock(exit_locks[1]);
+
+    puts("exiting");
+
+    exit(0);
+}
 
 /* if started with one arg - that filepath will be used to provide
  * startup state to ptp AS WELL AS shutdown storage
@@ -404,17 +435,36 @@ int main(int a, char** b){
     struct mq_ph_pair mqph = {.mq = &mq, .ph = &ph};
 
     init_mq(&mq);
-    init_probe_history(&ph);
+    init_probe_history(&ph, (a > 2) ? b[2] : NULL);
+
+    exit_locks[0] = &ph.lock;
+    exit_locks[1] = &ph.file_storage_lock;
+
+    signal(SIGINT, wait_to_exit);
 
     if(a > 1){
         FILE* fp = fopen(b[1], "r");
         load_probe_history(&ph, fp);
         fclose(fp);
     }
+    ph.restore_complete = 1;
 
-    pthread_t pth[3];
+    pthread_t pth[2];
     pthread_create(pth, NULL, collector_thread, &mq);
     pthread_create(pth+1, NULL, processor_thread, &mqph);
+
+    /*
+     * two big big issues - 
+     *     this is only usable if a startup file is used eek
+     *     i need to ensure that ptp doesn't exit during a 
+     *     dump_probe_history()
+     *     i need to have a signal handler that waits until a
+     *     dump is over
+     *     okay, i can just signal(sigint)
+     *     and pthread_lock() ph lock and file storage lock
+     *     once acquired, exit(0)
+     *     we'll call this ~safe~ lol
+    */
 
     repl(&ph);
     while(1){
