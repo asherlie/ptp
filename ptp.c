@@ -460,17 +460,20 @@ int main(int a, char** b){
     struct mqueue mq;
     struct probe_history ph;
     struct mq_ph_pair mqph = {.mq = &mq, .ph = &ph};
+    char* init_fn = NULL, * offload_fn = NULL;
+
+    parse_args(a, b, &init_fn, &offload_fn);
 
     init_mq(&mq);
-    init_probe_history(&ph, (a > 2) ? b[2] : NULL);
+    init_probe_history(&ph, offload_fn);
 
     exit_locks[0] = &ph.lock;
     exit_locks[1] = &ph.file_storage_lock;
 
     signal(SIGINT, wait_to_exit);
 
-    if(a > 1){
-        FILE* fp = fopen(b[1], "r");
+    if(init_fn){
+        FILE* fp = fopen(init_fn, "r");
         load_probe_history(&ph, fp);
         fclose(fp);
     }
