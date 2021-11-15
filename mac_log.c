@@ -510,7 +510,7 @@ int* ssid_overview(struct probe_history* ph, char* ssid, int second_interval, in
     time_t oldest = oldest_probe(ph);
     int* buckets, n_buckets = (time(NULL)-oldest)/second_interval;
     printf("secs: %li\n", time(NULL)-oldest);
-    n_buckets = (time(NULL)-oldest)/second_interval;
+    n_buckets = ((time(NULL)-oldest)/second_interval) + 1;
     *sz = n_buckets;
 
     /* which bucket is determined by

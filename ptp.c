@@ -393,7 +393,8 @@ void handle_command(char* cmd, struct probe_history* ph){
             }
             p_probes(ph, args[2], args[1], NULL, NULL);
             break;
-        case 'z':{
+        /* [e]xport_csv */
+        case 'e':{
             /*
              * i need to:
              * if possible have the x axis print real times
