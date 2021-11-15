@@ -396,7 +396,6 @@ void handle_command(char* cmd, struct probe_history* ph){
             break;
         /* [e]xport_csv */
         /* now all there is to do before this takes the place of [e] is:
-         * make it more usable - should be export <interval> <out_fn> {ssid filter 0} {ssid filter 1}, {...}
          *
          * i need a separate command that creates a csv but in unique addr mode - arbitrarily many probes from a single
          * address will show up as one
@@ -405,7 +404,8 @@ void handle_command(char* cmd, struct probe_history* ph){
          *
          * another way to put it would be that each mac address should only appear once per bucket
          */
-        case 'z':{
+        /* [e]xport */
+        case 'e':{
             int n_secs = 0;
             struct ssid_overview_hash* soh;
             FILE* fp;
@@ -459,43 +459,6 @@ void handle_command(char* cmd, struct probe_history* ph){
             /* TODO: truly free */
             free_soh(soh);
             free(soh);
-            break;
-        }
-        case 'e':{
-            /*
-             * i need to:
-             * if possible have the x axis print real times
-             * 10:00 am, etc
-             *
-             * have multiple/all ssids on one graph
-             * should be as easy as having multiple columns
-             * 
-             * an absolutely insane way to do this would be to use ssid_overview()
-             * for each individual ssid and print them together
-             *
-             * very inefficient - O(n) for each ssid - O(n^2)
-             *
-             * better would be to create a temporary hash map indexed by ssid
-             * and to iterate through it one ssid at a time, incrementing buckets
-             *
-             */
-            int sz, n_secs = 60*5, * so = ssid_overview(ph, args[1], n_secs, &sz);
-            time_t tt = oldest_probe(ph);
-            struct tm lt;
-            char date_str[30];
-            FILE* fp = fopen(args[2], "w");
-
-            fprintf(fp, "%i second period,%s\n", n_secs, args[1]);
-
-            for(int i = 0; i < sz; ++i){
-                memset(date_str, 0, sizeof(date_str));
-                tt += n_secs;
-                localtime_r((time_t*)&tt, &lt);
-                strftime(date_str, 50, "%B %d %Y %I:%M:%S %p", &lt);
-                fprintf(fp, "%s,%i\n", date_str, so[i]);
-            }
-            free(so);
-            fclose(fp);
             break;
         }
         /* [o]ldest */
