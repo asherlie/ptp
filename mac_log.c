@@ -535,6 +535,15 @@ int* ssid_overview(struct probe_history* ph, char* ssid, int second_interval, in
         if(!ph->buckets[i])continue;
         for(struct mac_addr* ma = ph->buckets[i]; ma; ma = ma->next){
             for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
+                /* could change this to just add to buckets in a structure indexed
+                 * by ssid - sum(ssid)+*ssid
+                 * we'll need buckets - 255
+                 * omg - i can think of a collision free hashing function
+                 * ind_0 * 1 + ind_1*3 + ind_2*7 - will this ever have collisions?
+                 * ind_0 * 2 + ind_1*3 + ind_2*4 - will this ever have collisions?
+                 * "aaa" = 2+3+4 = 7
+                 * ""
+                 */
                 if(strstr(ps->ssid, ssid)){
                     for(int i = 0; i < ps->n_probes; ++i){
                         ++buckets[(ps->probe_times[i]-oldest)/second_interval];

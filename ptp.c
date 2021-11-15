@@ -15,6 +15,7 @@
 #include "mac_log.h"
 #include "persist.h"
 #include "mq.h"
+#include "csv.h"
 
 /* these are set to ph lock and file storage lock
  * and are used to ensure a safe exit so that
@@ -249,7 +250,7 @@ _Bool parse_maddr(char* mstr, uint8_t mac[6]){
 }
 
 void handle_command(char* cmd, struct probe_history* ph){
-    char* args[100] = {0};
+    char* args[200] = {0};
     char* sp = cmd, * prev = cmd;
     int n_args = 0;
 
@@ -394,6 +395,72 @@ void handle_command(char* cmd, struct probe_history* ph){
             p_probes(ph, args[2], args[1], NULL, NULL);
             break;
         /* [e]xport_csv */
+        /* now all there is to do before this takes the place of [e] is:
+         * make it more usable - should be export <interval> <out_fn> {ssid filter 0} {ssid filter 1}, {...}
+         *
+         * i need a separate command that creates a csv but in unique addr mode - arbitrarily many probes from a single
+         * address will show up as one
+         *
+         * it'll export the number of unique addresses making probes per period
+         *
+         * another way to put it would be that each mac address should only appear once per bucket
+         */
+        case 'z':{
+            int n_secs = 0;
+            struct ssid_overview_hash* soh;
+            FILE* fp;
+            time_t tt = oldest_probe(ph);
+            struct tm lt;
+            char date_str[30];
+
+            if(!args[1]){
+                puts("please provide an interval in minutes");
+                break;
+            }
+
+            n_secs = 60*atoi(args[1]);
+            fp = args[2] ? fopen(args[2], "w") : stdout;
+
+            if(!fp){
+                puts("please provide a valid output file");
+                break;
+            }
+
+            soh = gen_ssid_overview(ph, n_secs);
+
+            /* filter using all remaining args */
+            /*
+             * args+1 is n_secs
+             * args[2] is first filter unless args[2] contains fn
+            */
+            filter_soh(soh, args+2+((_Bool)args[2]));
+
+            fprintf(fp, "%i second period", n_secs);
+            for(int i = 0; i < STR_HASH_MAX; ++i){
+                if(soh->se[i]){
+                    fprintf(fp, ",%s", soh->se[i]->ssid);
+                }
+            }
+            fputc('\n', fp);
+            for(int i = 0; i < soh->n_buckets; ++i){
+                localtime_r((time_t*)&tt, &lt);
+                memset(date_str, 0, sizeof(date_str));
+                strftime(date_str, 50, "%B %d %Y %I:%M:%S %p", &lt);
+
+                fprintf(fp, "%s", date_str);
+                for(int j = 0; j < STR_HASH_MAX; ++j){
+                    if(!soh->se[j])continue;
+                    fprintf(fp, ",%i", soh->se[j]->buckets[i]);
+                }
+                fputc('\n', fp);
+                tt += n_secs;
+            }
+            if(fp != stdout)fclose(fp);
+            /* TODO: truly free */
+            free_soh(soh);
+            free(soh);
+            break;
+        }
         case 'e':{
             /*
              * i need to:
@@ -402,6 +469,14 @@ void handle_command(char* cmd, struct probe_history* ph){
              *
              * have multiple/all ssids on one graph
              * should be as easy as having multiple columns
+             * 
+             * an absolutely insane way to do this would be to use ssid_overview()
+             * for each individual ssid and print them together
+             *
+             * very inefficient - O(n) for each ssid - O(n^2)
+             *
+             * better would be to create a temporary hash map indexed by ssid
+             * and to iterate through it one ssid at a time, incrementing buckets
              *
              */
             int sz, n_secs = 60*5, * so = ssid_overview(ph, args[1], n_secs, &sz);
