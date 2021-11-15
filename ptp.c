@@ -429,6 +429,33 @@ void wait_to_exit(int sig){
  *
  * TODO: add SIGTERM signal handler to dump_probe_history()
  */
+void parse_args(int a, char** b, char** in_fn, char** out_fn){
+    _Bool set_in = 0, set_out = 0;
+
+    for(int i = 1; i < a; ++i){
+        if(set_in){
+            *in_fn = b[i];
+            set_in = 0;
+        }
+        if(set_out){
+            *out_fn = b[i];
+            set_out = 0;
+        }
+        else if(*b[i] == '-'){
+            switch(b[i][1]){
+                case 'I':
+                case 'i':
+                    set_in = 1;
+                    break;
+                case 'O':
+                case 'o':
+                    set_out = 1;
+                    break;
+            }
+        }
+    }
+}
+
 int main(int a, char** b){
     struct mqueue mq;
     struct probe_history ph;
