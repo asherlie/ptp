@@ -41,6 +41,10 @@ struct probe_history{
 
     int unique_addresses, total_probes;
 
+    /* so that we don't offload after each offload_after insertions before
+     * restoring is complete
+     */
+    _Bool restore_complete;
     int offload_after;
     char* offload_fn;
 };

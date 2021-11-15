@@ -82,10 +82,11 @@ void init_probe_history(struct probe_history* ph, char* fn){
         ph->buckets[i] = NULL;
     }
     init_mac_stack(&ph->ms, 20);
+    ph->restore_complete = 0;
 
     if(fn){
         ph->offload_fn = fn;
-        ph->offload_after = 5;
+        ph->offload_after = 1;
     }
 }
 
@@ -137,6 +138,11 @@ _Bool insert_probe(struct probe_storage* ps, time_t timestamp){
     return 1;
 }
 
+FILE* maybe_open_fp(struct probe_history* ph){
+   return (ph->restore_complete && ph->offload_fn && 
+          !(ph->total_probes % ph->offload_after)) 
+          ? fopen(ph->offload_fn, "w") : NULL;
+}
 
 struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32], time_t timestamp){
     int idx = sum_mac_addr(mac_addr);
@@ -220,7 +226,7 @@ struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac
      * of a difference since the last offload
      * we'll skip the dump for this insertion
      */
-    offload_fp = (ph->offload_fn && !(ph->total_probes % ph->offload_after)) ? fopen(ph->offload_fn, "w") : NULL;
+    offload_fp = maybe_open_fp(ph);
 
     pthread_mutex_unlock(&ph->lock);
 
