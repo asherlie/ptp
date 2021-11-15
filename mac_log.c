@@ -505,12 +505,13 @@ time_t oldest_probe(struct probe_history* ph){
     return oldest;
 }
 
-int* ssid_overview(struct probe_history* ph, char* ssid, int second_interval){
+int* ssid_overview(struct probe_history* ph, char* ssid, int second_interval, int* sz){
     /*for(struct mac_addr* ma = ph->*/
     time_t oldest = oldest_probe(ph);
     int* buckets, n_buckets = (time(NULL)-oldest)/second_interval;
     printf("secs: %li\n", time(NULL)-oldest);
     n_buckets = (time(NULL)-oldest)/second_interval;
+    *sz = n_buckets;
 
     /* which bucket is determined by
      * ((time_t in question) - oldest) % something

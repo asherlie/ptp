@@ -393,11 +393,35 @@ void handle_command(char* cmd, struct probe_history* ph){
             }
             p_probes(ph, args[2], args[1], NULL, NULL);
             break;
-        case 'z':
-            /*ssid_overview();*/
-            /*ssid_overview(ph, args[1], 10*1000000);*/
-            ssid_overview(ph, args[1], 10);
+        case 'z':{
+            /*
+             * i need to:
+             * if possible have the x axis print real times
+             * 10:00 am, etc
+             *
+             * have multiple/all ssids on one graph
+             * should be as easy as having multiple columns
+             *
+             */
+            int sz, n_secs = 60*5, * so = ssid_overview(ph, args[1], n_secs, &sz);
+            time_t tt = oldest_probe(ph);
+            struct tm lt;
+            char date_str[30];
+            FILE* fp = fopen(args[2], "w");
+
+            fprintf(fp, "%i second period,%s\n", n_secs, args[1]);
+
+            for(int i = 0; i < sz; ++i){
+                memset(date_str, 0, sizeof(date_str));
+                tt += n_secs;
+                localtime_r((time_t*)&tt, &lt);
+                strftime(date_str, 50, "%B %d %Y %I:%M:%S %p", &lt);
+                fprintf(fp, "%s,%i\n", date_str, so[i]);
+            }
+            free(so);
+            fclose(fp);
             break;
+        }
         /* [o]ldest */
         case 'o':
             break;
