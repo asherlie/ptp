@@ -292,6 +292,29 @@ void handle_command(char* cmd, struct probe_history* ph){
             printf("all probe data has been written to \"%s\"\n", args[1]);
             break;
         }
+        /* network over time command */
+        /* csv of a specific network
+         * this command should group probes into 10 or configurable n minute buckets
+         * and make a csv with number of distinct mac addresses that made probe requests
+         * in that window
+         * n_minute_period | one_direction
+         * -----------------------------
+         *  0              | 20
+         *  1              | 20
+         *  2              | 20
+         *  3              | 11
+         *  4              | 2
+         *  5              | 2
+         *
+         * first group all of the same ssid together
+         * total time = newest probe - oldest
+         * then make (total time)/(10*1000000) buckets - 10 second buckets
+         *
+         *   OR
+         * it should keep track of gaps
+         * possibly try different methods of quantifying number of 
+         * addresses per ssid
+         */
         /* [l]oad_backup */
         case 'l':{
             FILE* fp;
@@ -369,6 +392,11 @@ void handle_command(char* cmd, struct probe_history* ph){
                     *i = toupper(*i);
             }
             p_probes(ph, args[2], args[1], NULL, NULL);
+            break;
+        case 'z':
+            /*ssid_overview();*/
+            /*ssid_overview(ph, args[1], 10*1000000);*/
+            ssid_overview(ph, args[1], 10);
             break;
         /* [o]ldest */
         case 'o':

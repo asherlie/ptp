@@ -486,3 +486,62 @@ struct mac_addr* lookup_mac(struct probe_history* ph, uint8_t* mac){
     pthread_mutex_unlock(&ph->lock);
     return ma;
 }
+
+time_t oldest_probe(struct probe_history* ph){
+    time_t oldest = time(NULL);
+    pthread_mutex_lock(&ph->lock);
+
+    for(int i = 0; i < (0xff*6)+1; ++i){
+        /*if(ph->buckets[i]->)*/
+        if(!ph->buckets[i])continue;
+        for(struct mac_addr* ma = ph->buckets[i]; ma; ma = ma->next){
+            for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
+                if(*ps->probe_times < oldest)oldest = *ps->probe_times;
+            }
+        }
+    }
+    pthread_mutex_unlock(&ph->lock);
+
+    return oldest;
+}
+
+int* ssid_overview(struct probe_history* ph, char* ssid, int second_interval){
+    /*for(struct mac_addr* ma = ph->*/
+    time_t oldest = oldest_probe(ph);
+    int* buckets, n_buckets = (time(NULL)-oldest)/second_interval;
+    printf("secs: %li\n", time(NULL)-oldest);
+    n_buckets = (time(NULL)-oldest)/second_interval;
+
+    /* which bucket is determined by
+     * ((time_t in question) - oldest) % something
+     * ((time_t in question) - oldest) / second_interval
+     */
+    #if 0
+    100 seconds, there would be 10 intervals if second_interval == 10
+    == 100000000
+
+    if time_t-oldest = 90000000
+    would be ((time-oldest)/1000000) to get bucket in seconds i believe
+    #endif
+
+    printf("n buckets %i!\n", n_buckets);
+    pthread_mutex_lock(&ph->lock);
+
+    buckets = calloc(sizeof(int), n_buckets);
+
+    for(int i = 0; i < (0xff*6)+1; ++i){
+        /*if(ph->buckets[i]->)*/
+        if(!ph->buckets[i])continue;
+        for(struct mac_addr* ma = ph->buckets[i]; ma; ma = ma->next){
+            for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
+                if(strstr(ps->ssid, ssid)){
+                    for(int i = 0; i < ps->n_probes; ++i){
+                        ++buckets[(ps->probe_times[i]-oldest)/second_interval];
+                    }
+                }
+            }
+        }
+    }
+    pthread_mutex_unlock(&ph->lock);
+    return buckets;
+}

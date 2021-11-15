@@ -64,4 +64,4 @@ struct mac_addr* lookup_mac(struct probe_history* ph, uint8_t* mac);
  * of the recent probes and ssids
 */
 void init_mac_stack(struct mac_stack* ms, int n_most_recent);
-void insert_mac_stack_(struct mac_stack* ms, struct mac_addr* ma);
+int* ssid_overview(struct probe_history* ph, char* ssid, int second_interval);
