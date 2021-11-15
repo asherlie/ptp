@@ -86,7 +86,7 @@ void init_probe_history(struct probe_history* ph, char* fn){
 
     if(fn){
         ph->offload_fn = fn;
-        ph->offload_after = 10;
+        ph->offload_after = 1;
     }
 }
 
