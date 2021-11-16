@@ -48,14 +48,18 @@ int time_t_comparator(const void* x, const void* y){
 }
 
 /* we should be able to detect invalid files */
+/* hmm - files are sometimes corrupted - the time_ts are sometimes
+ * large negative numbers
+ */
 int load_probe_history(struct probe_history* ph, FILE* fp){
     uint8_t addr[6];
     char ssid[32], * note;
     int notelen, ps_len, n_probes, probes_removed = 0;
-    time_t probe_time;
+    time_t probe_time, current = time(NULL);
     struct probe_storage* ps;
     int n_inserted = 0;
     int fingerprint;
+    int n_corrupted = 0;
 
     pthread_mutex_lock(&ph->file_storage_lock);
 
@@ -73,6 +77,15 @@ int load_probe_history(struct probe_history* ph, FILE* fp){
             if(fread(&n_probes, sizeof(int), 1, fp) != 1)goto EXIT;
             for(int j = 0; j < n_probes; ++j){
                 if(fread(&probe_time, sizeof(time_t), 1, fp) != 1)goto EXIT;
+                /* 1635379200 is the date of the first commit to ptp
+                 * any backups that are older are a bit suspicious
+                 * TODO: find out why/how dumps get corrupted
+                 */
+                if(probe_time > current || (probe_time < 1635379200)){
+                    /* if this probe is bad, ignore and print about it later */
+                    ++n_corrupted;
+                    continue;
+                }
                 /* this pointer is used for sorting after all probes have been inserted
                  * this pointer should be identical with each iteration
                  */
@@ -110,6 +123,10 @@ int load_probe_history(struct probe_history* ph, FILE* fp){
     pthread_mutex_lock(&ph->lock);
     ph->total_probes -= probes_removed;
     pthread_mutex_unlock(&ph->lock);
+
+    if(n_corrupted){
+        printf("%sdump contains %i ~probably~ corrupted probes%s\n", ANSI_RED, n_corrupted, ANSI_RESET);
+    }
 
     return n_inserted-probes_removed;
 }

@@ -456,7 +456,6 @@ void handle_command(char* cmd, struct probe_history* ph){
                 tt += n_secs;
             }
             if(fp != stdout)fclose(fp);
-            /* TODO: truly free */
             free_soh(soh);
             free(soh);
             break;
