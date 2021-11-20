@@ -222,7 +222,11 @@ struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac
 
     pthread_mutex_unlock(&ph->lock);
 
-    insert_mac_stack(&ph->ms, ready_bucket);
+    /* TODO: [r] commands should work out of the box after restoring */
+    /* we don't need any locks to be acquired to check the value of restore_complete
+     * because it's set to 1 only once - before any but the main thread are running
+     */
+    if(ph->restore_complete)insert_mac_stack(&ph->ms, ready_bucket);
 
     if(offload_fp){
         dump_probe_history(ph, offload_fp);

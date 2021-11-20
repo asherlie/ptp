@@ -541,6 +541,10 @@ int main(int a, char** b){
         load_probe_history(&ph, fp);
         fclose(fp);
     }
+
+    /* this is used to avoid insertions to mac_stack and 
+     * calls to dump_probe_history() during startup
+     */
     ph.restore_complete = 1;
 
     pthread_t pth[2];
