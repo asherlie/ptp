@@ -68,22 +68,26 @@ void init_soh(struct ssid_overview_hash* soh, int n_buckets, int second_interval
     /*memset(soh->se, 0, sizeof(struct soh_entry*)*STR_HASH_MAX);*/
 }
 
-void free_soh(struct ssid_overview_hash* soh){
+void free_se(struct soh_entry* se, int n_buckets){
     struct addr_entry* prev_ae;
+    free(se->buckets);
+    for(int i = 0; i < n_buckets; ++i){
+        prev_ae = se->addresses[i].first;
+        if(!prev_ae)continue;
+        for(struct addr_entry* ae = prev_ae->next; ae; ae = ae->next){
+            free(prev_ae);
+            prev_ae = ae;
+        }
+        free(prev_ae);
+    }
+    free(se->addresses);
+    free(se);
+}
+
+void free_soh(struct ssid_overview_hash* soh){
     for(int i = 0; i < STR_HASH_MAX; ++i){
         if(soh->se[i]){
-            free(soh->se[i]->buckets);
-            for(int j = 0; j < soh->n_buckets; ++j){
-                prev_ae = soh->se[i]->addresses[j].first;
-                if(!prev_ae)continue;
-                for(struct addr_entry* ae = prev_ae->next; ae; ae = ae->next){
-                    free(prev_ae);
-                    prev_ae = ae;
-                }
-                free(prev_ae);
-            }
-            free(soh->se[i]->addresses);
-            free(soh->se[i]);
+            free_se(soh->se[i], soh->n_buckets);
         }
     }
     free(soh->se);
@@ -162,8 +166,7 @@ void filter_soh(struct ssid_overview_hash* soh, char** filters, int occurence_fl
         /*printf("%s - n p: %i\n", soh->se[i]->ssid, soh->se[i]->n_probes);*/
         if(soh->se[i]->n_probes < occurence_floor || (*filters && !strmatch(soh->se[i]->ssid, filters))){
             /*printf("removing!\n");*/
-            free(soh->se[i]->buckets);
-            free(soh->se[i]);
+            free_se(soh->se[i], soh->n_buckets);
             soh->se[i] = NULL;
         }
     }
