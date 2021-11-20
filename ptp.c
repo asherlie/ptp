@@ -188,6 +188,8 @@ uint8_t** parse_raw_packet(uint8_t* packet, int len){
         }
     }
     if(!valid){
+        free(ssid);
+        free(addr);
         free(ret);
         free(packet);
         return NULL;
@@ -197,7 +199,6 @@ uint8_t** parse_raw_packet(uint8_t* packet, int len){
     ret[0] = addr;
     ret[1] = ssid;
 
-    /*free(packet);*/
     return ret;
 }
 
@@ -208,11 +209,16 @@ void process_packets(struct mqueue* mq, struct probe_history* ph){
     while(1){
         mqe = pop_mq(mq);
         fields = parse_raw_packet(mqe->buf, mqe->len);
-        if(!fields)continue;
+        if(!fields){
+            free(mqe);
+            continue;
+        }
         insert_probe_request(ph, fields[0], (char*)fields[1], mqe->timestamp, 0);
 
         free(mqe->buf);
         free(mqe);
+        free(fields[0]);
+        free(fields[1]);
         free(fields);
     }
 }

@@ -86,6 +86,7 @@ void free_soh(struct ssid_overview_hash* soh){
             free(soh->se[i]);
         }
     }
+    free(soh->se);
 }
 
 int str_hash(char str[32]){
