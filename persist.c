@@ -90,7 +90,7 @@ int load_probe_history(struct probe_history* ph, FILE* fp){
                 /* this pointer is used for sorting after all probes have been inserted
                  * this pointer should be identical with each iteration
                  */
-                ps = insert_probe_request(ph, addr, ssid, probe_time);
+                ps = insert_probe_request(ph, addr, ssid, probe_time, 1);
                 ++n_inserted;
             }
             /* after reading all probes for a given mac/ssid pair,

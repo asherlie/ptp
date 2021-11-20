@@ -74,7 +74,6 @@ void init_probe_history(struct probe_history* ph, char* fn){
         ph->buckets[i] = NULL;
     }
     init_mac_stack(&ph->ms, 20);
-    ph->restore_complete = 0;
 
     ph->offload_fn = fn;
     if(fn){
@@ -131,12 +130,13 @@ _Bool insert_probe(struct probe_storage* ps, time_t timestamp){
 }
 
 FILE* maybe_open_fp(struct probe_history* ph){
-   return (ph->restore_complete && ph->offload_fn && 
+   return (ph->offload_fn && 
           !(ph->total_probes % ph->offload_after)) 
           ? fopen(ph->offload_fn, "w") : NULL;
 }
 
-struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32], time_t timestamp){
+struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6],
+                                           char ssid[32], time_t timestamp, _Bool from_reload){
     int idx = sum_mac_addr(mac_addr);
     struct mac_addr** bucket, * prev_bucket, * ready_bucket;
     struct probe_storage* ps;
@@ -213,20 +213,16 @@ struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac
 
     ph->total_probes += insert_probe(ps, timestamp);
 
-    /* setting offload_fp here while we have ph->lock acquired
-     * if this is NULL in case of no offload_fn or not enough
-     * of a difference since the last offload
-     * we'll skip the dump for this insertion
+    /* would be very bad form to offload during a [l]oad command
+     * ESPECIALLY if -o and -i values are identical
+     * this would immediately corrupt our files
      */
-    offload_fp = maybe_open_fp(ph);
+    offload_fp = (from_reload) ? NULL : maybe_open_fp(ph);
 
     pthread_mutex_unlock(&ph->lock);
 
     /* TODO: [r] commands should work out of the box after restoring */
-    /* we don't need any locks to be acquired to check the value of restore_complete
-     * because it's set to 1 only once - before any but the main thread are running
-     */
-    if(ph->restore_complete)insert_mac_stack(&ph->ms, ready_bucket);
+    if(!from_reload)insert_mac_stack(&ph->ms, ready_bucket);
 
     if(offload_fp){
         dump_probe_history(ph, offload_fp);

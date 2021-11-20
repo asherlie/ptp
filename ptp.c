@@ -209,7 +209,7 @@ void process_packets(struct mqueue* mq, struct probe_history* ph){
         mqe = pop_mq(mq);
         fields = parse_raw_packet(mqe->buf, mqe->len);
         if(!fields)continue;
-        insert_probe_request(ph, fields[0], (char*)fields[1], mqe->timestamp);
+        insert_probe_request(ph, fields[0], (char*)fields[1], mqe->timestamp, 0);
 
         free(mqe->buf);
         free(mqe);
@@ -541,11 +541,6 @@ int main(int a, char** b){
         load_probe_history(&ph, fp);
         fclose(fp);
     }
-
-    /* this is used to avoid insertions to mac_stack and 
-     * calls to dump_probe_history() during startup
-     */
-    ph.restore_complete = 1;
 
     pthread_t pth[2];
     pthread_create(pth, NULL, collector_thread, &mq);
