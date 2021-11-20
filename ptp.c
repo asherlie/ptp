@@ -405,8 +405,9 @@ void handle_command(char* cmd, struct probe_history* ph){
          * another way to put it would be that each mac address should only appear once per bucket
          */
         /* [e]xport */
+        case 'u':
         case 'e':{
-            int n_secs = 0;
+            int n_secs = 0, min_occurences = 0;
             struct ssid_overview_hash* soh;
             FILE* fp;
             time_t tt = oldest_probe(ph);
@@ -419,21 +420,36 @@ void handle_command(char* cmd, struct probe_history* ph){
             }
 
             n_secs = 60*atoi(args[1]);
-            fp = args[2] ? fopen(args[2], "w") : stdout;
+            if(!n_secs)n_secs = 60*30;
+
+            if(args[2]){
+                min_occurences = atoi(args[2]);
+            }
+
+            fp = args[3] ? fopen(args[3], "w") : stdout;
 
             if(!fp){
                 puts("please provide a valid output file");
                 break;
             }
 
-            soh = gen_ssid_overview(ph, n_secs);
+            soh = gen_ssid_overview(ph, n_secs, *cmd == 'u');
 
             /* filter using all remaining args */
             /*
              * args+1 is n_secs
              * args[2] is first filter unless args[2] contains fn
             */
-            filter_soh(soh, args+2+((_Bool)args[2]));
+            /*
+             * n secs is args[1]
+             * min_occurences is optionally args[2]
+             * filepath is optionally args[3]
+             *
+             * should prob be
+             * export <period> <min_occurence> (filter_0) (filter_1) (filter...) <out_fp>
+             * export <period> (min_occurence) (out_file) | filters
+             */
+            filter_soh(soh, args+4, min_occurences);
 
             fprintf(fp, "%i second period", n_secs);
             for(int i = 0; i < STR_HASH_MAX; ++i){
