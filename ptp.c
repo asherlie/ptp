@@ -114,7 +114,7 @@ void collect_packets(struct mqueue* mq){
     if(!pc)exit(0);
 
     while(1){
-        packet = pcap_next(pc, &hdr);
+        if(!(packet = pcap_next(pc, &hdr)))continue;
         packet_copy = malloc(hdr.len);
         memcpy(packet_copy, packet, hdr.len);
         insert_mq(mq, packet_copy, hdr.len);
@@ -408,11 +408,7 @@ void handle_command(char* cmd, struct probe_history* ph){
         case 'u':
         case 'e':{
             int n_secs = 0, min_occurences = 0;
-            struct ssid_overview_hash* soh;
             FILE* fp;
-            time_t tt = oldest_probe(ph);
-            struct tm lt;
-            char date_str[30];
 
             if(!args[1]){
                 puts("please provide an interval in minutes");
@@ -433,47 +429,9 @@ void handle_command(char* cmd, struct probe_history* ph){
                 break;
             }
 
-            soh = gen_ssid_overview(ph, n_secs, *cmd == 'u');
+            export_csv(ph, fp, n_secs, *cmd == 'u', args+4, min_occurences);
 
-            /* filter using all remaining args */
-            /*
-             * args+1 is n_secs
-             * args[2] is first filter unless args[2] contains fn
-            */
-            /*
-             * n secs is args[1]
-             * min_occurences is optionally args[2]
-             * filepath is optionally args[3]
-             *
-             * should prob be
-             * export <period> <min_occurence> (filter_0) (filter_1) (filter...) <out_fp>
-             * export <period> (min_occurence) (out_file) | filters
-             */
-            filter_soh(soh, args+4, min_occurences);
-
-            fprintf(fp, "%i second period", n_secs);
-            for(int i = 0; i < STR_HASH_MAX; ++i){
-                if(soh->se[i]){
-                    fprintf(fp, ",%s", soh->se[i]->ssid);
-                }
-            }
-            fputc('\n', fp);
-            for(int i = 0; i < soh->n_buckets; ++i){
-                localtime_r((time_t*)&tt, &lt);
-                memset(date_str, 0, sizeof(date_str));
-                strftime(date_str, 50, "%B %d %Y %I:%M:%S %p", &lt);
-
-                fprintf(fp, "%s", date_str);
-                for(int j = 0; j < STR_HASH_MAX; ++j){
-                    if(!soh->se[j])continue;
-                    fprintf(fp, ",%i", soh->se[j]->buckets[i]);
-                }
-                fputc('\n', fp);
-                tt += n_secs;
-            }
             if(fp != stdout)fclose(fp);
-            free_soh(soh);
-            free(soh);
             break;
         }
         /* [o]ldest */

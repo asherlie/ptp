@@ -68,7 +68,8 @@ int load_probe_history(struct probe_history* ph, FILE* fp){
     while(fread(addr, 1, 6, fp) == 6){
         if(fread(&notelen, sizeof(int), 1, fp) != 1)goto EXIT;
         if(notelen){
-            note = malloc(notelen);
+            note = malloc(notelen+1);
+            note[notelen] = 0;
             if((int)fread(note, 1, notelen, fp) != notelen)goto EXIT;
         }
         fread(&ps_len, sizeof(int), 1, fp);

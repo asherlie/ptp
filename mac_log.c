@@ -76,8 +76,8 @@ void init_probe_history(struct probe_history* ph, char* fn){
     init_mac_stack(&ph->ms, 20);
     ph->restore_complete = 0;
 
+    ph->offload_fn = fn;
     if(fn){
-        ph->offload_fn = fn;
         ph->offload_after = 1;
     }
 }
