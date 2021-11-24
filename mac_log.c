@@ -32,15 +32,6 @@ void insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
         /* if it's already at the top of the stack */
         if(ma->mac_stack_idx == ms->ins_idx-1)goto EXIT;
         
-        #if 0
-        [a, b, c, d, e, f]
-                        ^ ins idx-1
-            ^ original index
-        inserting b
-        memmove(dest, src, sz);
-        memmove(original_idx, ins_idx-1, ins_idx-original_idx);
-        #endif
-        /*memmove(ms->addrs+ma->mac_stack_idx, ms->addrs+ms->ins_idx-1, (ms->ins_idx-ma->mac_stack_idx)*sizeof(struct mac_addr*));*/
         for(int i = ma->mac_stack_idx; i < ms->ins_idx-1; ++i){
             ms->addrs[i] = ms->addrs[i+1];
             --ms->addrs[i]->mac_stack_idx;
@@ -105,8 +96,6 @@ struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
     new_entry->next = NULL;
     new_entry->notes = NULL;
     new_entry->probes = NULL;
-    /*new_entry->probes = malloc(sizeof(struct probe_storage));*/
-    /*init_probe_storage(new_entry->probes);*/
 
     return new_entry;
 }
@@ -129,36 +118,28 @@ _Bool insert_probe(struct probe_storage* ps, time_t timestamp){
     return 1;
 }
 
-FILE* maybe_open_fp(struct probe_history* ph){
-   return (ph->offload_fn && 
-          !(ph->total_probes % ph->offload_after)) 
-          ? fopen(ph->offload_fn, "w") : NULL;
-}
-
-struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6],
-                                           char ssid[32], time_t timestamp, _Bool from_reload){
+struct probe_storage* _insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6],
+                                           char ssid[32], time_t timestamp, _Bool from_reload, _Bool lock){
     int idx = sum_mac_addr(mac_addr);
     struct mac_addr** bucket, * prev_bucket, * ready_bucket;
     struct probe_storage* ps;
-    _Bool found_bucket = 0;
-    FILE* offload_fp;
+    _Bool found_bucket = 0, attempt_offload;
 
-    pthread_mutex_lock(&ph->lock);
+    if(lock)pthread_mutex_lock(&ph->lock);
 
     bucket = &ph->buckets[idx];
 
     /* initialize bucket if not found */
     if(!*bucket){
-        /*printf("no bucket found at idx %i, creating!\n", idx);*/
         ++ph->unique_addresses;
         *bucket = alloc_mac_addr_bucket(mac_addr);
     }
 
-    #if 0
-    lookup bucket, if not found, allocate with new specific mac
-    go through all buckets looking for mac
-    if not found, alloc bucket
-    #endif
+    /*
+     * lookup bucket, if not found, allocate with new specific mac
+     * go through all buckets looking for mac
+     * if not found, alloc bucket
+    */
 
     for(ready_bucket = *bucket; ready_bucket; ready_bucket = ready_bucket->next){
         if(!memcmp(ready_bucket->addr, mac_addr, 6)){
@@ -216,29 +197,41 @@ struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac
     /* would be very bad form to offload during a [l]oad command
      * ESPECIALLY if -o and -i values are identical
      * this would immediately corrupt our files
+     *
+     * checking while lock still acquired
      */
-    offload_fp = (from_reload) ? NULL : maybe_open_fp(ph);
+    attempt_offload = !from_reload && ph->offload_fn && 
+                      !(ph->total_probes % ph->offload_after);
 
-    pthread_mutex_unlock(&ph->lock);
+    if(lock)pthread_mutex_unlock(&ph->lock);
 
     /* TODO: [r] commands should work out of the box after restoring */
     if(!from_reload)insert_mac_stack(&ph->ms, ready_bucket);
 
-    if(offload_fp){
-        dump_probe_history(ph, offload_fp);
-        fclose(offload_fp);
-    }
+    if(attempt_offload)dump_probe_history(ph, ph->offload_fn);
 
     return ps;
 }
 
-_Bool add_note(struct probe_history* ph, uint8_t addr[6], char* note){
+struct probe_storage* insert_probe_request_nolock(struct probe_history* ph, uint8_t mac_addr[6],
+                                           char ssid[32], time_t timestamp, _Bool from_reload){
+    return _insert_probe_request(ph, mac_addr, ssid, timestamp, from_reload, 0);
+}
+
+struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6],
+                                           char ssid[32], time_t timestamp, _Bool from_reload){
+    return _insert_probe_request(ph, mac_addr, ssid, timestamp, from_reload, 1);
+}
+
+_Bool _add_note(struct probe_history* ph, uint8_t addr[6], char* note, _Bool lock){
     struct mac_addr* ma;
 
-    for(char* i = note; *i; ++i)
-        *i = toupper(*i);
+    if(note){
+        for(char* i = note; *i; ++i)
+            *i = toupper(*i);
+    }
 
-    pthread_mutex_lock(&ph->lock);
+    if(lock)pthread_mutex_lock(&ph->lock);
 
     ma = ph->buckets[sum_mac_addr(addr)];
     for(; ma; ma = ma->next){
@@ -248,8 +241,16 @@ _Bool add_note(struct probe_history* ph, uint8_t addr[6], char* note){
             return 1;
         }
     }
-    pthread_mutex_unlock(&ph->lock);
+    if(lock)pthread_mutex_unlock(&ph->lock);
     return 0;
+}
+
+_Bool add_note(struct probe_history* ph, uint8_t addr[6], char* note){
+    return _add_note(ph, addr, note, 1);
+}
+
+_Bool add_note_nolock(struct probe_history* ph, uint8_t addr[6], char* note){
+    return _add_note(ph, addr, note, 0);
 }
 
 /*
@@ -262,34 +263,11 @@ TODO - make this threadsafe but fast by having a separate mutex lock at each buc
 
 TODO - users should be able to connect to issue commands/request info about mac addresses
 
-TODO - in the meantime before a working probe collector is written, i can spoof data in a
-       collector thread
-*/
-/*
- * i'll split this up into different layers so that i can have functions that print requests of a given mac address
- * this will be helpful in the repl, where i can issue commands to print the number of unique mac addresses, which is now tracked
- *
- * as well as a mac address lookup command, that lets the user print mac addr nots and all requests by a given mac
- *
- * TODO: write this:
- *   as well as an ssid command that prints all users that have attempted to connect to a given ssid
- *   this will be very slow, but is going to be called rarely
- *
- * as well as a mac address and ssid lookup command that will print time and date of each probe from a given mac to a given ssid
- *   to achieve this, the lowest level print function will optionally print all probe times
 */
 
 /*
  * TODO: fix issues exposed by valgrind
  * TODO: add client that can remote connect
- * TODO: write a way to not lose my precious data - i'm thinking the following: - THIS IS HIGH PRIORITY
- *          write to a file that has been fwrite()d with raw bytes of mac address followed by size of probe list
- *          followed by raw bytes of probe list
- *          i can go thru until there's no more file, insert_probe()ing mac addresses and then mallocing the perfect
- *          amount of space and reading/copying over our probe request integers
- *
- *          this should occur every minute
- *
  * TODO: add [r]ange command to print entries within a range, enable filtering
  *
  * TODO: add mac address alerts - alert when mac sends a probe
@@ -300,28 +278,7 @@ TODO - in the meantime before a working probe collector is written, i can spoof 
  *       the export command should be able to be filtered both by ssid and mac address or EITHER
  *       i can possibly bake this into the existing print functions
  *
- * TODO: there should be a command to print by most recent, to do this i can keep a separate linked list
- *       that just has references to the existing struct mac_addr*s, each one is added, it's inserted also
- *       into the front of this new list, this creates a time ordered list
- *
- *       this is also how we'll implement the range command - it'll be trivial once we have a time sorted
- *       list - iterate until time is too great, then stop
- *
- * TODO: search by note
- *
  * TODO: print new to me command
- *
- * TODO: [m]ost_recent n - this command prints the n most recently received probes
- *       i can just use p_mac_addr probe()
- *       and keep track of the 1000 most recent using a separate
- *       linked list
- *
- *       might be simpler to store just most recent addresses, not probes
- *       would get complicated if we have to print 2 most recent probes from the same
- *       address/ssid
- *       since summary mode prints only most recent
- *
- *       or should it just be most recent ssid and we can spoof mac address for printing hmm...
  *
  * TODO: INTERESTING - add field in each probe for proximity - distance from router
  *       i can base this off of power, WOW
@@ -333,8 +290,6 @@ TODO - in the meantime before a working probe collector is written, i can spoof 
  *          OR have non-verbose print most recent
  *
  * most important missing features:
- *   export as csv
- *   dump to file for reloading to mem later
  *
  *   there might need to be two separate csv formats
  *      one focused on ssid
@@ -402,7 +357,6 @@ void p_mac_addr_probe(struct mac_addr* ma, _Bool p_timestamps, char* ssid, uint8
 }
 
 /*this doesn't work with probes that were loaded from a dump, hmm*/
-/*void p_most_recent(struct mac_stack* ms, int n){*/
 void p_most_recent(struct probe_history* ph, int n){
     int c = 0;
     
@@ -485,7 +439,6 @@ time_t oldest_probe(struct probe_history* ph){
     pthread_mutex_lock(&ph->lock);
 
     for(int i = 0; i < (0xff*6)+1; ++i){
-        /*if(ph->buckets[i]->)*/
         if(!ph->buckets[i])continue;
         for(struct mac_addr* ma = ph->buckets[i]; ma; ma = ma->next){
             for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){

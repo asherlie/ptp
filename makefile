@@ -1,7 +1,6 @@
 CC=gcc
 CFLAGS= -Wall -Wextra -Wpedantic -Werror -pthread -DREADLINE -lreadline -lpcap -g
 
-#all: example
 all: ptp 
 
 csv.o: csv.c csv.h mac_log.o

@@ -31,7 +31,6 @@ struct soh_entry{
     int n_probes;
     int* buckets;
     struct addr_ll* addresses;
-    /*struct mac_addr* ma;*/
     char* ssid;
 };
 
@@ -65,7 +64,6 @@ void init_soh(struct ssid_overview_hash* soh, int n_buckets, int second_interval
     soh->n_buckets = n_buckets;
     soh->second_interval = second_interval;
     soh->se = calloc(sizeof(struct soh_entry*), STR_HASH_MAX);
-    /*memset(soh->se, 0, sizeof(struct soh_entry*)*STR_HASH_MAX);*/
 }
 
 void free_se(struct soh_entry* se, int n_buckets){
@@ -107,7 +105,6 @@ int str_hash(char str[32]){
 }
 
 
-/*void insert_soh(struct ssid_overview_hash* soh, char ssid[32], struct probe_storage* ps){*/
 void insert_soh(struct ssid_overview_hash* soh, struct probe_storage* ps, uint8_t* addr, time_t oldest){
     int idx, bucket;
     if(!soh->se[(idx = str_hash(ps->ssid))]){
@@ -126,7 +123,6 @@ void insert_soh(struct ssid_overview_hash* soh, struct probe_storage* ps, uint8_
             if(al_contains(&soh->se[idx]->addresses[bucket], addr))continue;
             insert_al(&soh->se[idx]->addresses[bucket], addr);
         }
-        /*++soh->se[idx]->buckets[(ps->probe_times[i]-oldest)/soh->second_interval];*/
         ++soh->se[idx]->n_probes;
         ++soh->se[idx]->buckets[bucket];
     }
@@ -159,13 +155,11 @@ _Bool strmatch(char* str, char** filters){
     }
     return 0;
 }
-/* TODO: should this be build in to gen_ssid_overview()? */
+/* TODO: should this be built in to gen_ssid_overview()? */
 void filter_soh(struct ssid_overview_hash* soh, char** filters, int occurence_floor){
     for(int i = 0; i < STR_HASH_MAX; ++i){
         if(!soh->se[i])continue;
-        /*printf("%s - n p: %i\n", soh->se[i]->ssid, soh->se[i]->n_probes);*/
         if(soh->se[i]->n_probes < occurence_floor || (*filters && !strmatch(soh->se[i]->ssid, filters))){
-            /*printf("removing!\n");*/
             free_se(soh->se[i], soh->n_buckets);
             soh->se[i] = NULL;
         }

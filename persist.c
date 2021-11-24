@@ -2,11 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "persist.h"
 #include "mac_log.h"
 
-void dump_probe_history(struct probe_history* ph, FILE* fp){
+_Bool dump_probe_history(struct probe_history* ph, char* fn){
+    FILE* fp;
     struct mac_addr* ma;
     int notelen;
     int ps_len;
@@ -14,6 +16,7 @@ void dump_probe_history(struct probe_history* ph, FILE* fp){
 
     pthread_mutex_lock(&ph->lock);
     pthread_mutex_lock(&ph->file_storage_lock);
+    if(!(fp = fopen(fn, "w")))goto EXIT;
     fwrite(&fingerprint, sizeof(int), 1, fp);
     for(int i = 0; i < (0xff*6)+1; ++i){
         if((ma = ph->buckets[i])){
@@ -39,8 +42,13 @@ void dump_probe_history(struct probe_history* ph, FILE* fp){
             }
         }
     }
+    fclose(fp);
+
+    EXIT:
     pthread_mutex_unlock(&ph->lock);
     pthread_mutex_unlock(&ph->file_storage_lock);
+
+    return fp;
 }
 
 int time_t_comparator(const void* x, const void* y){
@@ -51,33 +59,56 @@ int time_t_comparator(const void* x, const void* y){
 /* hmm - files are sometimes corrupted - the time_ts are sometimes
  * large negative numbers
  */
-int load_probe_history(struct probe_history* ph, FILE* fp){
+
+int _load_probe_history(struct probe_history* ph, char* fn){
+    FILE* fp;
     uint8_t addr[6];
     char ssid[32], * note;
     int notelen, ps_len, n_probes, probes_removed = 0;
     time_t probe_time, current = time(NULL);
     struct probe_storage* ps;
     int n_inserted = 0;
-    int fingerprint;
+    int fingerprint = 0;
     int n_corrupted = 0;
+    _Bool failure = 0;
 
+    pthread_mutex_lock(&ph->lock);
     pthread_mutex_lock(&ph->file_storage_lock);
 
-    if(fread(&fingerprint, sizeof(int), 1, fp) != 1 || 
-        fingerprint != (sizeof(struct mac_addr) + sizeof(struct probe_storage) + sizeof(time_t)))goto EXIT;
+    if(!(fp = fopen(fn, "r"))){
+        failure = 1;
+        goto EXIT;
+    }
+
+    /* if file can't be read from we might be getting
+     * spammed with signals
+     * give it some time and attempt to load again
+     */
+    if(fread(&fingerprint, sizeof(int), 1, fp) != 1){
+        failure = 1;
+        goto EXIT;
+    }
+    if(fingerprint != (sizeof(struct mac_addr) + sizeof(struct probe_storage) + sizeof(time_t)))
+        goto EXIT;
+
     while(fread(addr, 1, 6, fp) == 6){
-        if(fread(&notelen, sizeof(int), 1, fp) != 1)goto EXIT;
+        if(fread(&notelen, sizeof(int), 1, fp) != 1)
+            goto EXIT;
         if(notelen){
             note = malloc(notelen+1);
             note[notelen] = 0;
-            if((int)fread(note, 1, notelen, fp) != notelen)goto EXIT;
+            if((int)fread(note, 1, notelen, fp) != notelen)
+                goto EXIT;
         }
         fread(&ps_len, sizeof(int), 1, fp);
         for(int i = 0; i < ps_len; ++i){
-            if(fread(ssid, 1, 32, fp) != 32)goto EXIT;
-            if(fread(&n_probes, sizeof(int), 1, fp) != 1)goto EXIT;
+            if(fread(ssid, 1, 32, fp) != 32)
+                goto EXIT;
+            if(fread(&n_probes, sizeof(int), 1, fp) != 1)
+                goto EXIT;
             for(int j = 0; j < n_probes; ++j){
-                if(fread(&probe_time, sizeof(time_t), 1, fp) != 1)goto EXIT;
+                if(fread(&probe_time, sizeof(time_t), 1, fp) != 1)
+                    goto EXIT;
                 /* 1635379200 is the date of the first commit to ptp
                  * any backups that are older are a bit suspicious
                  * TODO: find out why/how dumps get corrupted
@@ -90,7 +121,7 @@ int load_probe_history(struct probe_history* ph, FILE* fp){
                 /* this pointer is used for sorting after all probes have been inserted
                  * this pointer should be identical with each iteration
                  */
-                ps = insert_probe_request(ph, addr, ssid, probe_time, 1);
+                ps = insert_probe_request_nolock(ph, addr, ssid, probe_time, 1);
                 ++n_inserted;
             }
             /* after reading all probes for a given mac/ssid pair,
@@ -114,70 +145,30 @@ int load_probe_history(struct probe_history* ph, FILE* fp){
             }
         }
         /* done after our iteration to ensure that fields exist */
-        if(notelen)add_note(ph, addr, note);
+        if(notelen)add_note_nolock(ph, addr, note);
     }
     EXIT:
-
-    pthread_mutex_unlock(&ph->file_storage_lock);
-
+    if(fp)fclose(fp);
     /* subtract probes_removed to keep ph->total_probes accurate */
-    pthread_mutex_lock(&ph->lock);
     ph->total_probes -= probes_removed;
+
     pthread_mutex_unlock(&ph->lock);
+    pthread_mutex_unlock(&ph->file_storage_lock);
 
     if(n_corrupted){
         printf("%sdump contains %i ~probably~ corrupted probes%s\n", ANSI_RED, n_corrupted, ANSI_RESET);
     }
 
+    /* return -1 if we couldn't read the first handful of bytes or open the fp */
+    if(failure)return -1;
     return n_inserted-probes_removed;
 }
 
-#if 0
-void gen_rand_mac_addr(uint8_t dest[6], int unique_bytes){
-    int x = random(), y = random();
-
-    memcpy(dest, &x, sizeof(int));
-    memcpy(dest+sizeof(int), &y, 6-sizeof(int));
-    for(int i = 0; i < 6-unique_bytes; ++i){
-        dest[i] = 0xff;
+int load_probe_history(struct probe_history* ph, char* fn){
+    int n_attempts = 1, ret = _load_probe_history(ph, fn);
+    for(int i = 0; (i < n_attempts-1) && (ret == -1); ++i){
+        usleep(10000);
+        ret = _load_probe_history(ph, fn);
     }
+    return ret;
 }
-
-void test(char* fn){
-    FILE* fp = fopen(fn, "w");
-    struct probe_history ph, loaded_ph;
-    uint8_t addr[6];
-    char ssid[32] = "one_direction", * note = malloc(20);
-    strcpy(note, "this is a network");
-    srand(time(NULL));
-    init_probe_history(&ph);
-    init_probe_history(&loaded_ph);
-    for(int i = 0; i < 1000; ++i){
-        /* the last 600 insertions will be to the same addr */
-        gen_rand_mac_addr(addr, 6);
-        insert_probe_request(&ph, addr, ssid, time(NULL));
-        add_note(&ph, addr, note);
-    }
-    for(int i = 0; i < 10000; ++i){
-        insert_probe_request(&ph, addr, ssid, time(NULL));
-    }
-    dump_probe_history(&ph, fp);
-    fclose(fp);
-
-    fp = fopen(fn, "r");
-    load_probe_history(&loaded_ph, fp);
-    fclose(fp);
-
-    p_probes(&loaded_ph, 1, NULL, NULL);
-    puts("----SEPARATOR----");
-    p_probes(&ph, 1, NULL, NULL);
-
-    free_probe_history(&ph);
-}
-
-int main(int a, char** b){
-    (void)a;
-    test(b[1]);
-    return 0;
-}
-#endif

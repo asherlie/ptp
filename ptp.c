@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
+#include <ctype.h>
 
 #include <pcap.h>
 
@@ -17,16 +18,12 @@
 #include "mq.h"
 #include "csv.h"
 
-/* these are set to ph lock and file storage lock
- * and are used to ensure a safe exit so that
+#define PTP_VER_STR "0.9.0"
+
+/* used to ensure a safe exit so that
  * offload files aren't corrupted
  */
-pthread_mutex_t* exit_locks[2];
-
-/*
- * repl, thread to collect packets and add them to queue
- * thread to pop from queue and process
-*/
+struct probe_history* __ph;
 
 pcap_t* _pcap_init(){
     pcap_t* pcap_data;
@@ -73,27 +70,6 @@ pcap_t* _pcap_init(){
     return pcap_data;
 }
 
-void gen_rand_mac_addr(uint8_t dest[6], int unique_bytes){
-    int x = random(), y = random();
-
-    memcpy(dest, &x, sizeof(int));
-    memcpy(dest+sizeof(int), &y, 6-sizeof(int));
-    for(int i = 0; i < 6-unique_bytes; ++i){
-        dest[i] = 0xff;
-    }
-}
-
-/* generates a spoofed packet */
-uint8_t* gen_packet(int* len){
-    uint8_t* pkt = calloc(1, 64);
-    if(len)*len = 64;
-    gen_rand_mac_addr(pkt, 6);
-    strcpy((char*)pkt+6, "asher's network");
-    pkt[6] += random() % 26;
-    
-    return pkt;
-}
-
 struct rtap_hdr{
     uint8_t it_version;
     uint8_t it_pad;
@@ -102,11 +78,9 @@ struct rtap_hdr{
 } __attribute__((__packed__));
 
 void collect_packets(struct mqueue* mq){
-    int pktlen;
     struct pcap_pkthdr hdr;
     const uint8_t* packet;
 
-    char ssid[32];
     uint8_t* packet_copy;
 
     pcap_t* pc = _pcap_init();
@@ -114,86 +88,37 @@ void collect_packets(struct mqueue* mq){
     if(!pc)exit(0);
 
     while(1){
-        if(!(packet = pcap_next(pc, &hdr)))continue;
+        if(!(packet = pcap_next(pc, &hdr)))
+            continue;
         packet_copy = malloc(hdr.len);
         memcpy(packet_copy, packet, hdr.len);
         insert_mq(mq, packet_copy, hdr.len);
-        continue;
-        #if 0
-        for(int i = 0; i < (int)hdr.len; ++i){
-            if((packet[i] > 'a' && packet[i] < 'z') || (packet[i] > 'A' && packet[i] < 'Z'))
-            44, 44-16
-                printf("%i: %s\n", i, (char*)packet+i);
-        }
-        #endif
-        /*printf("%s\n", (char*)packet+51-20);*/
-        struct rtap_hdr* rhdr = (struct rtap_hdr*)packet;
-        /*radiotag + length + x == ssidlen*/
-        /* packet+rhdr->it_len + 10 should be sender address */
-        /*printf("zero: %i, rtap length: %i\n", rhdr->it_version, rhdr->it_len);*/
-        /*printf("%hhx:%hhx:%hhx:%hhx:%hhx:%hhx probed %s\n", packet[28], packet[29], packet[30], packet[31], packet[32], packet[33], packet+44);*/
-        /* 6 bytes before sa should be 0xff */
-        /*if(memcmp(packet+rhdr->it_len+10-6-6, 6))*/
-        _Bool valid = 1;
-        /*printf("%hhx should be 4\n", packet[rhdr->it_len]);*/
-        valid = ((int)packet[rhdr->it_len+10+15]) && packet[rhdr->it_len] == 0x40;
-        for(int i = 0; i < 6; ++i){
-            if(packet[rhdr->it_len+10-6+i] != 0xff){
-                  valid = 0;
-                  break;
-            }
-        }
-        if(!valid)continue;
-        /*printf("%hhx:%hhx:%hhx:%hhx:%hhx:%hhx probed %s\n", packet[rhdr->it_len+10], packet[rhdr->it_len+11], packet[rhdr->it_len+12], packet[rhdr->it_len+13], packet[rhdr->it_len+14], packet[rhdr->it_len+15], NULL);*/
-
-        /*printf("ssid len: %hhx\n", packet + rhdr->it_len + 10+15);*/
-        /*this seems to be working!*/
-        /*
-         *printf("ssid len: %hhx %i\n", packet [ rhdr->it_len + 10+15], packet [ rhdr->it_len + 10+15]);
-         *for(int i = 0; i < (int)packet[rhdr->it_len+10+15]; ++i){
-         *    printf("%c", packet[rhdr->it_len+10+15+1+i]);
-         *}
-         *puts("");
-         */
-
-        /*printf("len: %i\n", (int)packet[rhdr->it_len+10+15]);*/
-        memset(ssid, 0, 32);
-        memcpy(ssid, packet+rhdr->it_len+10+15+1, (int)packet[rhdr->it_len+10+15]);
-        /*puts(ssid);*/
-
-        /* sa +15 is the length of the ssid */
-        /*printf("");*/
-        /*insert_mq(mq, packet);*/
-        insert_mq(mq, gen_packet(&pktlen), pktlen);
-        /*usleep((random() + 100000) % 1000000);*/
-        /*usleep(5000000);*/
     }
 }
 
 /* returns two pointers within pkt - the first is addr[6], second is ssid[32] */
 uint8_t** parse_raw_packet(uint8_t* packet, int len){
-    uint8_t** ret = malloc(sizeof(uint8_t*)*2);
     struct rtap_hdr* rhdr = (struct rtap_hdr*)packet;
-    uint8_t* ssid = calloc(1, 32);
-    uint8_t* addr = calloc(1, 6);
-    _Bool valid = 1;
-    (void)len;
-    /*printf("%hhx should be 4\n", packet[rhdr->it_len]);*/
-    valid = ((int)packet[rhdr->it_len+10+15]) && packet[rhdr->it_len] == 0x40;
-    memcpy(addr, packet+rhdr->it_len+10, 6);
-    for(int i = 0; i < 6; ++i){
-        if(packet[rhdr->it_len+10-6+i] != 0xff){
-            valid = 0;
-            break;
-        }
-    }
-    if(!valid){
-        free(ssid);
-        free(addr);
-        free(ret);
-        free(packet);
+    uint8_t** ret;
+    uint8_t* ssid;
+    uint8_t* addr;
+
+    if(!((len > (int)sizeof(struct rtap_hdr)) && (len >= rhdr->it_len+10+15+1) &&
+       ((int)packet[rhdr->it_len+10+15]) && packet[rhdr->it_len] == 0x40)){
         return NULL;
     }
+
+    for(int i = 0; i < 6; ++i){
+        if(packet[rhdr->it_len+10-6+i] != 0xff){
+            return NULL;
+        }
+    }
+
+    ret = malloc(sizeof(uint8_t*)*2);
+    ssid = calloc(1, 32);
+    addr = calloc(1, 6);
+
+    memcpy(addr, packet+rhdr->it_len+10, 6);
     memcpy(ssid, packet+rhdr->it_len+10+15+1, (int)packet[rhdr->it_len+10+15]);
 
     ret[0] = addr;
@@ -210,6 +135,7 @@ void process_packets(struct mqueue* mq, struct probe_history* ph){
         mqe = pop_mq(mq);
         fields = parse_raw_packet(mqe->buf, mqe->len);
         if(!fields){
+            free(mqe->buf);
             free(mqe);
             continue;
         }
@@ -222,15 +148,6 @@ void process_packets(struct mqueue* mq, struct probe_history* ph){
         free(fields);
     }
 }
-
-#if 0
-have a packet that splits uint8_t to addr, 
-i need to mq needs to store timestamp too
-so that timestamp reflects the time of reception
-
-update the probe insertion to take a time_t argument
-#endif
-
 
 void* collector_thread(void* arg){
     collect_packets((struct mqueue*)arg);
@@ -249,10 +166,8 @@ void* processor_thread(void* arg){
 }
 
 _Bool parse_maddr(char* mstr, uint8_t mac[6]){
-    if(!mstr)return 0 ;
-    sscanf(mstr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
-           mac, mac+1, mac+2, mac+3, mac+4, mac+5);
-    return 1;
+    return mstr && sscanf(mstr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+                   mac, mac+1, mac+2, mac+3, mac+4, mac+5) == 6;
 }
 
 void handle_command(char* cmd, struct probe_history* ph){
@@ -288,14 +203,10 @@ void handle_command(char* cmd, struct probe_history* ph){
         #endif
         /* [b]ackup */
         case 'b':{
-            FILE* fp;
-            if(!args[1] || !(fp = fopen(args[1], "w"))){
+            if(!args[1] || !dump_probe_history(ph, args[1])){
                 puts("please provide a valid filename");
                 break;
             }
-            dump_probe_history(ph, fp);
-            fclose(fp);
-
             printf("all probe data has been written to \"%s\"\n", args[1]);
             break;
         }
@@ -324,14 +235,10 @@ void handle_command(char* cmd, struct probe_history* ph){
          */
         /* [l]oad_backup */
         case 'l':{
-            FILE* fp;
-            if(!args[1] || !(fp = fopen(args[1], "r"))){
+            if(!args[1] || load_probe_history(ph, args[1]) < 0){
                 puts("please provide a valid filename");
                 break;
             }
-            /* hmm - this is sometimes appending n probes to a mac/ssid pair - TODO: look into this */
-            load_probe_history(ph, fp);
-            fclose(fp);
             printf("all entries backed up in \"%s\" have been merged/loaded into current storage\n", args[1]);
             break;
         }
@@ -357,18 +264,14 @@ void handle_command(char* cmd, struct probe_history* ph){
         /* [n]ote */
         case 'n':{
             uint8_t mac[6] = {0};
-            FILE* fp = NULL;
-            parse_maddr(args[1], mac);
+            if(!parse_maddr(args[1], mac)){
+                puts("please enter a valid mac address");
+                break;
+            }
             if(add_note(ph, mac, args[2] ? strdup(args[2]) : NULL)){
-                /* TODO: what if this occurs during a routine offload
-                 * can i have two file pointers open at once
-                 * should be totally fine because of file_storage_lock
-                 * we don't do any ACTUAL writing unless this is acquired
-                 */
                 printf("added note to %s\n", args[1]);
-                if(ph->offload_fn && (fp = fopen(ph->offload_fn, "w"))){
-                    dump_probe_history(ph, fp);
-                }
+
+                if(ph->offload_fn)dump_probe_history(ph, ph->offload_fn);
             }
             else puts("failed to find matching MAC address");
             break;
@@ -400,17 +303,8 @@ void handle_command(char* cmd, struct probe_history* ph){
             }
             p_probes(ph, args[2], args[1], NULL, NULL);
             break;
+        /* [u]nique_xport_csv */
         /* [e]xport_csv */
-        /* now all there is to do before this takes the place of [e] is:
-         *
-         * i need a separate command that creates a csv but in unique addr mode - arbitrarily many probes from a single
-         * address will show up as one
-         *
-         * it'll export the number of unique addresses making probes per period
-         *
-         * another way to put it would be that each mac address should only appear once per bucket
-         */
-        /* [e]xport */
         case 'u':
         case 'e':{
             int n_secs = 0, min_occurences = 0;
@@ -447,7 +341,7 @@ void handle_command(char* cmd, struct probe_history* ph){
 }
 
 void repl(struct probe_history* ph){
-    char* ln = NULL;
+    char* ln;
     #ifndef READLINE
     size_t sz = 0;
     int len;
@@ -455,7 +349,6 @@ void repl(struct probe_history* ph){
 
     while(1){
         #ifdef READLINE
-        if(ln)free(ln);
         ln = readline("**PTP>** ");
         if(!ln || !*ln){
             for(int i = 0; i < 3; ++i){
@@ -470,35 +363,64 @@ void repl(struct probe_history* ph){
         }
         add_history(ln);
         #else
+        ln = NULL;
         len = getline(&ln, &sz, stdin);
         ln[--len] = 0;
         #endif
 
         handle_command(ln, ph);
+
+        free(ln);
     }
-    (void)ph;
 }
 
-void wait_to_exit(int sig){
-    (void)sig;
-    
-    printf("waiting to acquire locks in case of dump_probe_history()...");
+void* safe_exit_thread(void* arg){
+    struct probe_history* ph = arg;
 
+    /* dumping here just in case - it's conceivable that
+     * SIGINT is received during an insertion and safe_exit_thread
+     * acquires locks before insert() can initiate its dump()
+     * this is just being extra careful so as to not lose any data
+     */
+    if(ph->offload_fn){
+        dump_probe_history(ph, ph->offload_fn);
+        printf("ph dumped to %s... ", ph->offload_fn);
+    }
+
+    puts("waiting to safely exit");
     fflush(stdout);
+    pthread_mutex_lock(&ph->lock);
+    pthread_mutex_lock(&ph->file_storage_lock);
+    printf("ph & fs locks acquired...");
+    fflush(stdout);
+    free_probe_history(ph);
+    printf(" ph free()d...");
+    fflush(stdout);
+    raise(SIGKILL);
 
-    pthread_mutex_lock(exit_locks[0]);
-    pthread_mutex_lock(exit_locks[1]);
-
-    puts("exiting");
-
-    exit(0);
+    return NULL;
 }
 
-/* if started with one arg - that filepath will be used to provide
- * startup state to ptp AS WELL AS shutdown storage
+/* when a SIGINT is received, we need to 
+ * acquire locks in case anything important
+ * is happening - most importantly because we don't want to lose
+ * any data from our offloads. we can't acquire locks while in
+ * the signal handler because no work is being done
  *
- * TODO: add SIGTERM signal handler to dump_probe_history()
+ * as a workaround, we spawn a safe exit thread that dumps one
+ * final time before acquiring locks and freeing memory
  */
+void wait_to_exit(int sig){
+    pthread_t safe_exit_pth;
+
+    (void)sig;
+    signal(SIGINT, SIG_IGN);
+
+    pthread_create(&safe_exit_pth, NULL, safe_exit_thread, __ph);
+
+    return;
+}
+
 void parse_args(int a, char** b, char** in_fn, char** out_fn){
     _Bool set_in = 0, set_out = 0;
 
@@ -526,51 +448,36 @@ void parse_args(int a, char** b, char** in_fn, char** out_fn){
     }
 }
 
+void p_info(){
+    printf("PTP version %s "
+    #ifdef READLINE
+    "compiled with readline support"
+    #endif
+    "\n", PTP_VER_STR);
+}
+
 int main(int a, char** b){
     struct mqueue mq;
     struct probe_history ph;
     struct mq_ph_pair mqph = {.mq = &mq, .ph = &ph};
     char* init_fn = NULL, * offload_fn = NULL;
 
+    p_info();
+
     parse_args(a, b, &init_fn, &offload_fn);
 
     init_mq(&mq);
     init_probe_history(&ph, offload_fn);
 
-    exit_locks[0] = &ph.lock;
-    exit_locks[1] = &ph.file_storage_lock;
+    __ph = &ph;
 
     signal(SIGINT, wait_to_exit);
 
-    if(init_fn){
-        FILE* fp = fopen(init_fn, "r");
-        load_probe_history(&ph, fp);
-        fclose(fp);
-    }
+    if(init_fn)load_probe_history(&ph, init_fn);
 
     pthread_t pth[2];
     pthread_create(pth, NULL, collector_thread, &mq);
     pthread_create(pth+1, NULL, processor_thread, &mqph);
 
-    /*
-     * two big big issues - 
-     *     this is only usable if a startup file is used eek
-     *     i need to ensure that ptp doesn't exit during a 
-     *     dump_probe_history()
-     *     i need to have a signal handler that waits until a
-     *     dump is over
-     *     okay, i can just signal(sigint)
-     *     and pthread_lock() ph lock and file storage lock
-     *     once acquired, exit(0)
-     *     we'll call this ~safe~ lol
-    */
-
     repl(&ph);
-    while(1){
-        usleep(1000000);
-        printf("\r%i", ph.unique_addresses);
-        p_probes(&ph, 1, NULL, NULL, NULL);
-        fflush(stdout);
-    }
-    pthread_join(pth[0], NULL);
 }
