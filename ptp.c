@@ -18,7 +18,7 @@
 #include "mq.h"
 #include "csv.h"
 
-#define PTP_VER_STR "0.9.0"
+#define PTP_VER_STR "0.9.1"
 
 /* used to ensure a safe exit so that
  * offload files aren't corrupted
@@ -421,8 +421,8 @@ void wait_to_exit(int sig){
     return;
 }
 
-void parse_args(int a, char** b, char** in_fn, char** out_fn){
-    _Bool set_in = 0, set_out = 0;
+_Bool parse_args(int a, char** b, char** in_fn, char** out_fn){
+    _Bool set_in = 0, set_out = 0, version = 0;
 
     for(int i = 1; i < a; ++i){
         if(set_in){
@@ -435,6 +435,10 @@ void parse_args(int a, char** b, char** in_fn, char** out_fn){
         }
         else if(*b[i] == '-'){
             switch(b[i][1]){
+                case 'V':
+                case 'v':
+                    version = 1;
+                    break;
                 case 'I':
                 case 'i':
                     set_in = 1;
@@ -446,6 +450,7 @@ void parse_args(int a, char** b, char** in_fn, char** out_fn){
             }
         }
     }
+    return version;
 }
 
 void p_info(){
@@ -462,9 +467,10 @@ int main(int a, char** b){
     struct mq_ph_pair mqph = {.mq = &mq, .ph = &ph};
     char* init_fn = NULL, * offload_fn = NULL;
 
-    p_info();
-
-    parse_args(a, b, &init_fn, &offload_fn);
+    if(parse_args(a, b, &init_fn, &offload_fn)){
+        p_info();
+        return EXIT_SUCCESS;
+    }
 
     init_mq(&mq);
     init_probe_history(&ph, offload_fn);

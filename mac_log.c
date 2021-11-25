@@ -402,6 +402,7 @@ void free_mac_addr_lst(struct mac_addr* ma){
     struct mac_addr* prev = NULL;
     for(struct mac_addr* map = ma; map; map = map->next){
         if(prev)free(prev);
+        free(map->notes);
         free_probe_storage_lst(map->probes);
         prev = map;
     }
