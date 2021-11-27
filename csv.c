@@ -98,6 +98,7 @@ int str_hash(char str[32]){
                   61, 67, 71, 73, 79, 83, 89, 97,
                   101, 103, 107, 109, 113, 127, 131};
     for(int i = 0; i < 32; ++i){
+        if(!str[i])break;
         ret += str[i]*primes[i];
     }
 
