@@ -84,7 +84,7 @@ void init_probe_storage(struct probe_storage* ps, char ssid[32]){
     ps->next = NULL;
     ps->n_probes = 0;
     ps->probe_cap = 10000;
-    ps->probe_times = malloc(sizeof(time_t)*ps->probe_cap);
+    ps->probe_times = malloc(sizeof(int64_t)*ps->probe_cap);
     memcpy(ps->ssid, ssid, 32);
 }
 
@@ -101,7 +101,7 @@ struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
 }
 
 /* returns success */
-_Bool insert_probe(struct probe_storage* ps, time_t timestamp){
+_Bool insert_probe(struct probe_storage* ps, int64_t timestamp){
     /* we ignore probes that occur in the same second
      * as the next most recently received probe
      */
@@ -109,8 +109,8 @@ _Bool insert_probe(struct probe_storage* ps, time_t timestamp){
 
     if(ps->n_probes == ps->probe_cap){
         ps->probe_cap *= 2;
-        time_t* tmp = malloc(sizeof(time_t)*ps->probe_cap);
-        memcpy(tmp, ps->probe_times, sizeof(time_t)*ps->n_probes);
+        int64_t* tmp = malloc(sizeof(int64_t)*ps->probe_cap);
+        memcpy(tmp, ps->probe_times, sizeof(int64_t)*ps->n_probes);
         free(ps->probe_times);
         ps->probe_times = tmp;
     }
@@ -119,7 +119,7 @@ _Bool insert_probe(struct probe_storage* ps, time_t timestamp){
 }
 
 struct probe_storage* _insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6],
-                                           char ssid[32], time_t timestamp, _Bool from_reload, _Bool lock){
+                                           char ssid[32], int64_t timestamp, _Bool from_reload, _Bool lock){
     int idx = sum_mac_addr(mac_addr);
     struct mac_addr** bucket, * prev_bucket, * ready_bucket;
     struct probe_storage* ps;
@@ -214,12 +214,12 @@ struct probe_storage* _insert_probe_request(struct probe_history* ph, uint8_t ma
 }
 
 struct probe_storage* insert_probe_request_nolock(struct probe_history* ph, uint8_t mac_addr[6],
-                                           char ssid[32], time_t timestamp, _Bool from_reload){
+                                           char ssid[32], int64_t timestamp, _Bool from_reload){
     return _insert_probe_request(ph, mac_addr, ssid, timestamp, from_reload, 0);
 }
 
 struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6],
-                                           char ssid[32], time_t timestamp, _Bool from_reload){
+                                           char ssid[32], int64_t timestamp, _Bool from_reload){
     return _insert_probe_request(ph, mac_addr, ssid, timestamp, from_reload, 1);
 }
 
@@ -306,6 +306,7 @@ TODO - users should be able to connect to issue commands/request info about mac 
 */
 void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* ssid, char* prepend){
     char date_str[50];
+    time_t tmp_time;
     struct tm lt;
 
     if(ssid && !strstr(ps->ssid, ssid))return;
@@ -320,7 +321,8 @@ void p_probe_storage(struct probe_storage* ps, _Bool verbose, char* ssid, char* 
     }
 
     for(int i = (verbose) ? 0 : ps->n_probes-1; i < ps->n_probes; ++i){
-        localtime_r((time_t*)&ps->probe_times[i], &lt);
+        tmp_time = ps->probe_times[i];
+        localtime_r(&tmp_time, &lt);
         strftime(date_str, 50, "%A %B %d %Y @ %I:%M:%S %p", &lt);
         if(prepend){
             fputs(prepend, stdout);
@@ -435,8 +437,8 @@ struct mac_addr* lookup_mac(struct probe_history* ph, uint8_t* mac){
     return ma;
 }
 
-time_t oldest_probe(struct probe_history* ph){
-    time_t oldest = time(NULL);
+int64_t oldest_probe(struct probe_history* ph){
+    int64_t oldest = time(NULL);
     pthread_mutex_lock(&ph->lock);
 
     for(int i = 0; i < (0xff*6)+1; ++i){

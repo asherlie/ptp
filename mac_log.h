@@ -2,7 +2,6 @@
 
 #include <stdint.h>
 #include <pthread.h>
-#include <time.h>
 
 #define ANSI_RED     "\x1b[31m"
 #define ANSI_GREEN   "\x1b[32m"
@@ -12,10 +11,46 @@
 #define ANSI_CYAN    "\x1b[36m"
 #define ANSI_RESET   "\x1b[0m"
 
+#if 0
+TODO: all ints should have a declared size, not a problem for now but important to ensure
+broader portability
+
+once these changes are complete, there will be no more need for fingerprinting
+
+time_t should not even be used anywhere but when strftime is called
+we can use an int64_t until it is time to interpret
+
+
+once this is all working i will write a version to read in our file and export it int64_t version
+    the load function will remain untouched in this version
+
+    i can make it so that the only difference is the dump() function
+    which will create temp variables and cast from time_t to int64_t
+    before writing to disk
+
+    this should immediately fix the problem
+
+    i can confirm that all is well by echoing p verbose output to a file
+    and by comparing csvs
+    if all is not IDENTICAL, something is wrong
+    i need to be very careful so as not to lose data
+
+
+    there is no reason in fact to even have time.h included in any file but mac_log.c where strftime is called
+    and mq.c, where timestamp is generated
+    stamp can immediately be converted to the appropriate size in mq.c
+
+    int64_t stamp = time(NULL);
+
+    i will also need to update mq.{c,h} to get rid of the time_t
+
+i will then re-dump and restart my rpi collection using the new 64_t version with converted files
+#endif
+
 struct probe_storage{
     char ssid[32];
     int n_probes, probe_cap;
-    time_t* probe_times;
+    int64_t* probe_times;
 
     struct probe_storage* next;
 };
@@ -56,10 +91,10 @@ struct probe_history{
 void init_probe_history(struct probe_history* ph, char* fn);
 
 struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6],
-                                           char ssid[32], time_t timestamp, _Bool from_reload);
+                                           char ssid[32], int64_t timestamp, _Bool from_reload);
 
 struct probe_storage* insert_probe_request_nolock(struct probe_history* ph, uint8_t mac_addr[6],
-                                           char ssid[32], time_t timestamp, _Bool from_reload);
+                                           char ssid[32], int64_t timestamp, _Bool from_reload);
 
 _Bool add_note(struct probe_history* ph, uint8_t addr[6], char* note);
 _Bool add_note_nolock(struct probe_history* ph, uint8_t addr[6], char* note);
@@ -76,4 +111,4 @@ struct mac_addr* lookup_mac(struct probe_history* ph, uint8_t* mac);
  * of the recent probes and ssids
 */
 void init_mac_stack(struct mac_stack* ms, int n_most_recent);
-time_t oldest_probe(struct probe_history* ph);
+int64_t oldest_probe(struct probe_history* ph);

@@ -2,7 +2,7 @@
 #include <pthread.h>
 
 struct mq_entry{
-    time_t timestamp;
+    int64_t timestamp;
     uint8_t* buf;
     int len;
 

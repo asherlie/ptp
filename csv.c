@@ -106,6 +106,7 @@ int str_hash(char str[32]){
 }
 
 
+/* this can all safely use non portable time_t because it doesn't leave ptp's memory */
 void insert_soh(struct ssid_overview_hash* soh, struct probe_storage* ps, uint8_t* addr, time_t oldest){
     int idx, bucket;
     if(!soh->se[(idx = str_hash(ps->ssid))]){
@@ -169,7 +170,7 @@ void filter_soh(struct ssid_overview_hash* soh, char** filters, int occurence_fl
 
 void export_csv(struct probe_history* ph, FILE* fp, int second_interval, _Bool unique_macs, char** filters, int occurence_floor){
     char date_str[30];
-    time_t tt = oldest_probe(ph);
+    time_t tmp_time = oldest_probe(ph);
     struct tm lt;
     struct ssid_overview_hash* soh = gen_ssid_overview(ph, second_interval, unique_macs);
     filter_soh(soh, filters, occurence_floor);
@@ -182,7 +183,7 @@ void export_csv(struct probe_history* ph, FILE* fp, int second_interval, _Bool u
     }
     fputc('\n', fp);
     for(int i = 0; i < soh->n_buckets; ++i){
-        localtime_r((time_t*)&tt, &lt);
+        localtime_r(&tmp_time, &lt);
         memset(date_str, 0, sizeof(date_str));
         strftime(date_str, 50, "%B %d %Y %I:%M:%S %p", &lt);
 
@@ -192,7 +193,7 @@ void export_csv(struct probe_history* ph, FILE* fp, int second_interval, _Bool u
             fprintf(fp, ",%i", soh->se[j]->buckets[i]);
         }
         fputc('\n', fp);
-        tt += second_interval;
+        tmp_time += second_interval;
     }
 
     free_soh(soh);

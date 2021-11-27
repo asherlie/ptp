@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
 
 #include "persist.h"
@@ -12,7 +11,7 @@ _Bool dump_probe_history(struct probe_history* ph, char* fn){
     struct mac_addr* ma;
     int notelen;
     int ps_len;
-    int fingerprint = sizeof(struct mac_addr) + sizeof(struct probe_storage) + sizeof(time_t);
+    int fingerprint = sizeof(struct mac_addr) + sizeof(struct probe_storage) + sizeof(int64_t);
 
     pthread_mutex_lock(&ph->lock);
     pthread_mutex_lock(&ph->file_storage_lock);
@@ -37,7 +36,7 @@ _Bool dump_probe_history(struct probe_history* ph, char* fn){
                     
                     fwrite(ps->ssid, 1, 32, fp);
                     fwrite(&ps->n_probes, sizeof(int), 1, fp);
-                    fwrite(ps->probe_times, sizeof(time_t), ps->n_probes, fp);
+                    fwrite(ps->probe_times, sizeof(int64_t), ps->n_probes, fp);
                 }
             }
         }
@@ -51,8 +50,8 @@ _Bool dump_probe_history(struct probe_history* ph, char* fn){
     return fp;
 }
 
-int time_t_comparator(const void* x, const void* y){
-    return *((time_t*)x) > *((time_t*)y);
+int probe_comparator(const void* x, const void* y){
+    return *((int64_t*)x) > *((int64_t*)y);
 }
 
 /* we should be able to detect invalid files */
@@ -65,7 +64,7 @@ int _load_probe_history(struct probe_history* ph, char* fn){
     uint8_t addr[6];
     char ssid[32], * note;
     int notelen, ps_len, n_probes, probes_removed = 0;
-    time_t probe_time, current = time(NULL);
+    int64_t probe_time, current = time(NULL);
     struct probe_storage* ps;
     int n_inserted = 0;
     int fingerprint = 0;
@@ -88,8 +87,10 @@ int _load_probe_history(struct probe_history* ph, char* fn){
         failure = 1;
         goto EXIT;
     }
-    if(fingerprint != (sizeof(struct mac_addr) + sizeof(struct probe_storage) + sizeof(time_t)))
-        goto EXIT;
+    if(fingerprint != (sizeof(struct mac_addr) + sizeof(struct probe_storage) + sizeof(int))){
+        puts("bad fingerprint");
+        /*goto EXIT;*/
+    }
 
     while(fread(addr, 1, 6, fp) == 6){
         if(fread(&notelen, sizeof(int), 1, fp) != 1)
@@ -107,7 +108,7 @@ int _load_probe_history(struct probe_history* ph, char* fn){
             if(fread(&n_probes, sizeof(int), 1, fp) != 1)
                 goto EXIT;
             for(int j = 0; j < n_probes; ++j){
-                if(fread(&probe_time, sizeof(time_t), 1, fp) != 1)
+                if(fread(&probe_time, sizeof(int64_t), 1, fp) != 1)
                     goto EXIT;
                 /* 1635379200 is the date of the first commit to ptp
                  * any backups that are older are a bit suspicious
@@ -129,7 +130,7 @@ int _load_probe_history(struct probe_history* ph, char* fn){
              * logs will grow incomprehensible otherwise
              */
             /* it's good to have our probe times sorted even without duplicates */
-            qsort(ps->probe_times, ps->n_probes, sizeof(time_t), time_t_comparator);
+            qsort(ps->probe_times, ps->n_probes, sizeof(int64_t), probe_comparator);
             /* duplicates should only ever occur when two different backup have overlapping times
              * OR when one backup is applied more than once
              * so this expensive section is acceptable
@@ -137,7 +138,7 @@ int _load_probe_history(struct probe_history* ph, char* fn){
             /*would it be more efficient to just swap last and first and then re-sort? */
             for(int i = 0; i < ps->n_probes-1; ++i){
                 if(ps->probe_times[i] == ps->probe_times[i+1]){
-                    memmove(ps->probe_times+i, ps->probe_times+i+1, (ps->n_probes-(i+1))*sizeof(time_t));
+                    memmove(ps->probe_times+i, ps->probe_times+i+1, (ps->n_probes-(i+1))*sizeof(int64_t));
                     --ps->n_probes;
                     --i;
                     ++probes_removed;
