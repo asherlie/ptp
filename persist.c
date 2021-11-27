@@ -11,7 +11,8 @@ _Bool dump_probe_history(struct probe_history* ph, char* fn){
     struct mac_addr* ma;
     int notelen;
     int ps_len;
-    int fingerprint = sizeof(struct mac_addr) + sizeof(struct probe_storage) + sizeof(int64_t);
+    /* TODO: phase out fingerprinting altogether */
+    int fingerprint = -1;
 
     pthread_mutex_lock(&ph->lock);
     pthread_mutex_lock(&ph->file_storage_lock);
@@ -87,11 +88,6 @@ int _load_probe_history(struct probe_history* ph, char* fn){
         failure = 1;
         goto EXIT;
     }
-    if(fingerprint != (sizeof(struct mac_addr) + sizeof(struct probe_storage) + sizeof(int))){
-        puts("bad fingerprint");
-        /*goto EXIT;*/
-    }
-
     while(fread(addr, 1, 6, fp) == 6){
         if(fread(&notelen, sizeof(int), 1, fp) != 1)
             goto EXIT;
