@@ -25,35 +25,35 @@ void free_mac_stack(struct mac_stack* ms){
     pthread_mutex_destroy(&ms->lock);
 }
 
-void insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma){
-    pthread_mutex_lock(&ms->lock);
+void insert_mac_stack(struct mac_stack* ms, struct mac_addr* ma, enum mac_stack_indices which){
+    pthread_mutex_lock(&ms[which].lock);
     /* first handle pre-existing ma */
-    if(ma->mac_stack_idx != -1){
+    if(ma->mac_stack_idx[which] != -1){
         /* if it's already at the top of the stack */
-        if(ma->mac_stack_idx == ms->ins_idx-1)goto EXIT;
+        if(ma->mac_stack_idx[which] == ms[which].ins_idx-1)goto EXIT;
         
-        for(int i = ma->mac_stack_idx; i < ms->ins_idx-1; ++i){
-            ms->addrs[i] = ms->addrs[i+1];
-            --ms->addrs[i]->mac_stack_idx;
+        for(int i = ma->mac_stack_idx[which]; i < ms[which].ins_idx-1; ++i){
+            ms[which].addrs[i] = ms[which].addrs[i+1];
+            --ms[which].addrs[i]->mac_stack_idx[which];
         }
-        ms->addrs[ms->ins_idx-1] = ma;
-        ma->mac_stack_idx = ms->ins_idx-1;
+        ms[which].addrs[ms[which].ins_idx-1] = ma;
+        ma->mac_stack_idx[which] = ms[which].ins_idx-1;
         goto EXIT;
     }
     
     /* if we have no space, move everything over  */
-    if(ms->ins_idx == ms->n_most_recent){
-        for(int i = 0; i < ms->ins_idx-1; ++i){
-            ms->addrs[i] = ms->addrs[i+1];
-            --ms->addrs[i]->mac_stack_idx;
+    if(ms[which].ins_idx == ms[which].n_most_recent){
+        for(int i = 0; i < ms[which].ins_idx-1; ++i){
+            ms[which].addrs[i] = ms[which].addrs[i+1];
+            --ms[which].addrs[i]->mac_stack_idx[which];
         }
-        ms->addrs[ms->ins_idx-1] = ma;
-        ma->mac_stack_idx = ms->ins_idx-1;
+        ms[which].addrs[ms[which].ins_idx-1] = ma;
+        ma->mac_stack_idx[which] = ms[which].ins_idx-1;
     }
-    else ms->addrs[(ma->mac_stack_idx = ms->ins_idx++)] = ma;
+    else ms[which].addrs[(ma->mac_stack_idx[which] = ms[which].ins_idx++)] = ma;
 
     EXIT:
-    pthread_mutex_unlock(&ms->lock);
+    pthread_mutex_unlock(&ms[which].lock);
 }
 
 void init_probe_history(struct probe_history* ph, char* fn){
@@ -64,7 +64,8 @@ void init_probe_history(struct probe_history* ph, char* fn){
     for(int i = 0; i < (0xff*6)+1; ++i){
         ph->buckets[i] = NULL;
     }
-    init_mac_stack(&ph->ms, 20);
+    init_mac_stack(ph->ms, 100);
+    init_mac_stack(ph->ms+1, 100);
 
     ph->offload_fn = fn;
     if(fn){
@@ -92,7 +93,8 @@ struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
     struct mac_addr* new_entry = malloc(sizeof(struct mac_addr));
  
     memcpy(new_entry->addr, mac_addr, 6);
-    new_entry->mac_stack_idx = -1;
+    new_entry->mac_stack_idx[0] = -1;
+    new_entry->mac_stack_idx[1] = -1;
     new_entry->next = NULL;
     new_entry->notes = NULL;
     new_entry->probes = NULL;
@@ -118,12 +120,15 @@ _Bool insert_probe(struct probe_storage* ps, int64_t timestamp){
     return 1;
 }
 
-struct probe_storage* _insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6],
-                                           char ssid[32], int64_t timestamp, _Bool from_reload, _Bool lock){
+/* returns whether a new bucket had to be created */
+_Bool  _insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32],
+                             int64_t timestamp, _Bool from_reload, _Bool lock, struct mac_addr** ret_ma,
+                             struct probe_storage** ret_ps){
+
     int idx = sum_mac_addr(mac_addr);
     struct mac_addr** bucket, * prev_bucket, * ready_bucket;
     struct probe_storage* ps;
-    _Bool found_bucket = 0, attempt_offload;
+    _Bool found_bucket = 0, attempt_offload, ret = 0;
 
     if(lock)pthread_mutex_lock(&ph->lock);
 
@@ -131,6 +136,7 @@ struct probe_storage* _insert_probe_request(struct probe_history* ph, uint8_t ma
 
     /* initialize bucket if not found */
     if(!*bucket){
+        ret = 1;
         ++ph->unique_addresses;
         *bucket = alloc_mac_addr_bucket(mac_addr);
     }
@@ -153,6 +159,8 @@ struct probe_storage* _insert_probe_request(struct probe_history* ph, uint8_t ma
      * but the bucket is already occupied by mac addresses with the same sum
      */
     if(!found_bucket){
+        /* return whether or not we had to alloc a mac addr bucket */
+        ret = 1;
         ++ph->unique_addresses;
         ready_bucket = (prev_bucket->next = alloc_mac_addr_bucket(mac_addr));
     }
@@ -205,22 +213,31 @@ struct probe_storage* _insert_probe_request(struct probe_history* ph, uint8_t ma
 
     if(lock)pthread_mutex_unlock(&ph->lock);
 
-    /* TODO: [r] commands should work out of the box after restoring */
-    if(!from_reload)insert_mac_stack(&ph->ms, ready_bucket);
+    if(!from_reload){
+        // TODO: add another mac stack to keep track of new addrs AND new ssids
+        // TOTALLY new probes
+        insert_mac_stack(ph->ms, ready_bucket, RECENTLY_RECVD);
+        if(ret)insert_mac_stack(ph->ms, ready_bucket, NEW_ADDRS);
+    }
 
     if(attempt_offload)dump_probe_history(ph, ph->offload_fn);
 
-    return ps;
+    if(ret_ma)*ret_ma = ready_bucket;
+    if(ret_ps)*ret_ps = ps;
+
+    return ret;
 }
 
-struct probe_storage* insert_probe_request_nolock(struct probe_history* ph, uint8_t mac_addr[6],
-                                           char ssid[32], int64_t timestamp, _Bool from_reload){
-    return _insert_probe_request(ph, mac_addr, ssid, timestamp, from_reload, 0);
+_Bool  insert_probe_request_nolock(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32],
+                             int64_t timestamp, _Bool from_reload, struct mac_addr** ret_ma,
+                             struct probe_storage** ret_ps){
+    return _insert_probe_request(ph, mac_addr, ssid, timestamp, from_reload, 0, ret_ma, ret_ps);
 }
 
-struct probe_storage* insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6],
-                                           char ssid[32], int64_t timestamp, _Bool from_reload){
-    return _insert_probe_request(ph, mac_addr, ssid, timestamp, from_reload, 1);
+_Bool  insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char ssid[32],
+                             int64_t timestamp, _Bool from_reload, struct mac_addr** ret_ma,
+                             struct probe_storage** ret_ps){
+    return _insert_probe_request(ph, mac_addr, ssid, timestamp, from_reload, 1, ret_ma, ret_ps);
 }
 
 _Bool _add_note(struct probe_history* ph, uint8_t addr[6], char* note, _Bool lock){
@@ -359,18 +376,19 @@ void p_mac_addr_probe(struct mac_addr* ma, _Bool p_timestamps, char* ssid, uint8
 }
 
 /*this doesn't work with probes that were loaded from a dump, hmm*/
-void p_most_recent(struct probe_history* ph, int n){
+void p_mac_stack(struct probe_history* ph, enum mac_stack_indices which, int n){
     int c = 0;
     
     pthread_mutex_lock(&ph->lock);
-    pthread_mutex_lock(&ph->ms.lock);
+    pthread_mutex_lock(&ph->ms[which].lock);
 
-    for(int i = ph->ms.ins_idx-1; i >= 0 && c != n; --i){
-        p_mac_addr_probe(ph->ms.addrs[i], 0, NULL, NULL);
+    for(int i = ph->ms[which].ins_idx-1; i >= 0 && c != n; --i){
+        printf("%sSEQUENTIAL ENTRY #%i%s\n", ANSI_YELLOW, ph->ms[which].ins_idx-i, ANSI_RESET);
+        p_mac_addr_probe(ph->ms[which].addrs[i], 0, NULL, NULL);
         ++c;
     }
 
-    pthread_mutex_unlock(&ph->ms.lock);
+    pthread_mutex_unlock(&ph->ms[which].lock);
     pthread_mutex_unlock(&ph->lock);
 }
 
@@ -419,12 +437,12 @@ void free_probe_history(struct probe_history* ph){
     }
     pthread_mutex_destroy(&ph->lock);
     pthread_mutex_destroy(&ph->file_storage_lock);
-    free_mac_stack(&ph->ms);
+    free_mac_stack(ph->ms);
+    free_mac_stack(ph->ms+1);
 }
 
 struct mac_addr* lookup_mac(struct probe_history* ph, uint8_t* mac){
     struct mac_addr* ma;
-    pthread_mutex_lock(&ph->lock);
     ma = ph->buckets[sum_mac_addr(mac)];
     if(ma){
         for(; ma; ma = ma->next){
@@ -433,7 +451,6 @@ struct mac_addr* lookup_mac(struct probe_history* ph, uint8_t* mac){
             }
         }
     }
-    pthread_mutex_unlock(&ph->lock);
     return ma;
 }
 

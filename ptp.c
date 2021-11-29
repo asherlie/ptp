@@ -139,7 +139,7 @@ void process_packets(struct mqueue* mq, struct probe_history* ph){
             free(mqe);
             continue;
         }
-        insert_probe_request(ph, fields[0], (char*)fields[1], mqe->timestamp, 0);
+        insert_probe_request(ph, fields[0], (char*)fields[1], mqe->timestamp, 0, NULL, NULL);
 
         free(mqe->buf);
         free(mqe);
@@ -289,7 +289,10 @@ void handle_command(char* cmd, struct probe_history* ph){
             break;
         /* [r]ecent - prints the n mots recent probes */
         case 'r':
-            p_most_recent(ph, args[1] ? atoi(args[1]) : 1);
+            p_mac_stack(ph, RECENTLY_RECVD, args[1] ? atoi(args[1]) : 1);
+            break;
+        case 'z':
+            p_mac_stack(ph, NEW_ADDRS, args[1] ? atoi(args[1]) : 1);
             break;
         /* [f]ind - search by note */
         case 'f':

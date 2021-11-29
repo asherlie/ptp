@@ -105,7 +105,6 @@ int str_hash(char str[32]){
     return ret;
 }
 
-
 /* this can all safely use non portable time_t because it doesn't leave ptp's memory */
 void insert_soh(struct ssid_overview_hash* soh, struct probe_storage* ps, uint8_t* addr, time_t oldest){
     int idx, bucket;

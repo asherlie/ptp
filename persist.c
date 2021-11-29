@@ -6,6 +6,82 @@
 #include "persist.h"
 #include "mac_log.h"
 
+int ma_comparator(const void* x, const void* y){
+    const struct mac_addr* mx = x, * my = y;
+    /*printf("accessing %p and %p\n", (void*)mx->probes->probe_times, (void*)my->probes->probe_times);*/
+    return *mx->probes->probe_times > *my->probes->probe_times;
+}
+
+/* only necessary at startup/loading
+ * this operation sorts all probes by time and inserts them
+ * into a spoofed ph in sequential order - the generated mac stacks
+ * from the spoofed ph then have their info copied over to ph
+ * all mac index references are reset to -1
+ * in case this is called by the user
+ */
+void normalize_mac_stacks(struct probe_history* ph){
+    struct mac_addr* addrs = malloc(sizeof(struct mac_addr)*ph->/*unique_addresses*/total_probes), * ma;
+    struct probe_history spoof_ph;
+    int idx = 0;
+    init_probe_history(&spoof_ph, NULL);
+
+    pthread_mutex_lock(&ph->lock);
+    /* creating flattened mac stack array */
+    for(int i = 0; i < (0xff*6)+1; ++i){
+        if(!(ma = ph->buckets[i]))continue;
+        for(; ma; ma = ma->next){
+            for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
+                for(int j = 0; j < ps->n_probes; ++j){
+                    memcpy(addrs[idx].addr, ma->addr, 6);
+                    addrs[idx].probes = malloc(sizeof(struct probe_storage));
+                    addrs[idx].probes->probe_times = malloc(sizeof(int64_t));
+                    addrs[idx].probes->n_probes = 1;
+                    addrs[idx].probes->probe_cap = 1;
+                    addrs[idx].probes->next = NULL;
+                    memcpy(addrs[idx].probes->ssid, ps->ssid, 32);
+                    *addrs[idx].probes->probe_times = ps->probe_times[j];
+                    ++idx;
+                }
+            }
+        }
+    }
+
+    /* sorting, inserting */
+    qsort(addrs, ph->total_probes, sizeof(struct mac_addr), ma_comparator);
+    for(int i = 0; i < ph->total_probes; ++i){
+        insert_probe_request_nolock(&spoof_ph, addrs[i].addr, addrs[i].probes->ssid, *addrs[i].probes->probe_times, 0, NULL, NULL);
+        free(addrs[i].probes->probe_times);
+        free(addrs[i].probes);
+    }
+
+    free(addrs);
+
+    /* updating mac_stack_idx for original ph by looking up addr in ph,
+     * copying over data from spoofed mac stacks, removing now irrelevant
+     * old indices
+     *
+     */
+    for(int ms_i = 0; ms_i < 2; ++ms_i){
+        ph->ms[ms_i].ins_idx = spoof_ph.ms[ms_i].ins_idx;
+        for(int i = 0; i < spoof_ph.ms[ms_i].n_most_recent; ++i){
+            if(ph->ms[ms_i].addrs[i])ph->ms[ms_i].addrs[i]->mac_stack_idx[ms_i] = -1;
+            if(!spoof_ph.ms[ms_i].addrs[i]){
+                ph->ms[ms_i].addrs[i] = NULL;
+                continue;
+            }
+            ma = lookup_mac(ph, spoof_ph.ms[ms_i].addrs[i]->addr);
+            ma->mac_stack_idx[ms_i] = spoof_ph.ms[ms_i].addrs[i]->mac_stack_idx[ms_i];
+
+            ph->ms[ms_i].addrs[i] = ma;
+        }
+    }
+
+    free_probe_history(&spoof_ph);
+
+    pthread_mutex_unlock(&ph->lock);
+}
+
+
 _Bool dump_probe_history(struct probe_history* ph, char* fn){
     FILE* fp;
     struct mac_addr* ma;
@@ -115,10 +191,11 @@ int _load_probe_history(struct probe_history* ph, char* fn){
                     ++n_corrupted;
                     continue;
                 }
-                /* this pointer is used for sorting after all probes have been inserted
-                 * this pointer should be identical with each iteration
+
+                /* ps is used for sorting after all probes have been inserted
+                 * ps pointer should be identical with each iteration
                  */
-                ps = insert_probe_request_nolock(ph, addr, ssid, probe_time, 1);
+                insert_probe_request_nolock(ph, addr, ssid, probe_time, 1, NULL, &ps);
                 ++n_inserted;
             }
             /* after reading all probes for a given mac/ssid pair,
@@ -167,5 +244,6 @@ int load_probe_history(struct probe_history* ph, char* fn){
         usleep(10000);
         ret = _load_probe_history(ph, fn);
     }
+    normalize_mac_stacks(ph);
     return ret;
 }
