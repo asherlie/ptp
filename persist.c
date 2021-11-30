@@ -173,13 +173,14 @@ int _load_probe_history(struct probe_history* ph, char* fn){
             if((int)fread(note, 1, notelen, fp) != notelen)
                 goto EXIT;
         }
-        fread(&ps_len, sizeof(int), 1, fp);
-        for(int i = 0; i < ps_len; ++i){
+        if(fread(&ps_len, sizeof(int), 1, fp) != 1)
+            goto EXIT;
+        while(ps_len--){
             if(fread(ssid, 1, 32, fp) != 32)
                 goto EXIT;
             if(fread(&n_probes, sizeof(int), 1, fp) != 1)
                 goto EXIT;
-            for(int j = 0; j < n_probes; ++j){
+            while(n_probes--){
                 if(fread(&probe_time, sizeof(int64_t), 1, fp) != 1)
                     goto EXIT;
                 /* 1635379200 is the date of the first commit to ptp
