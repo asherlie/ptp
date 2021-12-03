@@ -200,7 +200,7 @@ _Bool parse_seconds(char* str, int* ret){
 #endif
 _Bool parse_seconds(char* str, int* ret){
 	char* endptr = NULL, lowend;
-	int conv = strtol(str, &endptr, 10);
+	double conv = strtod(str, &endptr);
 
 	int map[10] = {86400, 1, 1, 1, 60*60, 1, 1, 1, 1, 60};
 
@@ -209,7 +209,7 @@ _Bool parse_seconds(char* str, int* ret){
 	lowend = tolower(*endptr);
 	if(lowend >= 'd' && lowend <= 'm')conv *= (map[lowend-'d']);
 	
-	if(ret)*ret = conv;
+	if(ret)*ret = (int)(conv+.5);
 	return 1;
 }
 
@@ -225,6 +225,37 @@ void handle_command(char* cmd, struct probe_history* ph){
     }
     args[n_args++] = prev;
 
+
+    #if 0
+    NTD NEWTODO:
+    there really should be another csv option to create them based on address
+    graph addresses over time
+
+    addygraph <addr0> <addr1> <addr2> <addr...>
+
+    maybe based on buckets also
+
+    this can be done without any additional data structs
+    because ph is already indexed using addrs
+
+    create n buckets each sized according to time per bucket
+    there will be n_uniqe_macs buckets
+
+    go through each mac addr`s probes, adding each probe to the relevant bucket index
+
+    labels with be mac addresses unless a note exists, in which case it will be a note
+
+    also need a command for arrival time - prints all the times a device has sent a probe
+    after threshold seconds of inactivity
+    [arrival] [addr/note] <threshold>
+
+    ALSO important!!! a command to export csv for networks instead of users
+    will graph different users pings to a network over time
+    this will make it easy to group them together and reason about who is represented by what MAC
+
+    another option to give a list of days that someone is known to have been here
+    this returns a list of addresses, optionally with none that have notes included
+    #endif
 
     switch(*cmd){
         #if 0
@@ -305,6 +336,44 @@ void handle_command(char* cmd, struct probe_history* ph){
             p_probes(ph, 1, NULL, args[1], parse_maddr(args[2], mac) ? mac : NULL);
             break;
         }
+        #if 0
+        NTD NEWTODO:
+        need a new in the last n minutes command
+        prints probes received in the last n minutes that have never been seen before
+        if second arg is provided
+        it could be a date range perhaps
+        two options - first time seeing this ssiid
+        or first time seeing address
+
+        going through i can spoof a new ph and see when entries are created maybe? hmm
+        how do i confirm that they are within our window
+        could extend the size of our mac stack and have it be very large
+        or could have a separate mac stack that keeps track of only new elements
+
+        maybe this could take the form of a command that prints the most recent NEW elements
+        similar to [r]ecent
+        it will use a separate mac stack, yeah, i like that idea
+        populated with just those entries that were new when added
+
+            this is very easy to make note of - can just have an extra return value somewhere
+
+            ALSO - to replicate behavior upon startup - both for regular mac stack and our new one
+            that will keep track of new entries to never before seen addresses
+
+            we can do our mac stack magic IFF the probe time we are adding is the absolute NEWEST yet
+            this guarantees the same behavior as our vanilla
+
+            might not be as clever as i thought, the order of insertion still matters
+            what if we instert the newest element first? this is very unlikely
+
+        ALSO - all mac stack behavior should be replicated upon startup
+
+        can possibly go thru ph at each level and see when the newest probe is new enough to be included
+        and print it
+
+        alos wow i need the option to link two instances together
+        they can share their storage/get a fuller picture of an area
+        #endif
         /* [n]ote */
         case 'n':{
             uint8_t mac[6] = {0};
@@ -360,13 +429,10 @@ void handle_command(char* cmd, struct probe_history* ph){
             int n_secs = 0, min_occurences = 0;
             FILE* fp;
 
-            if(!args[1] || !parse_seconds(args[1], &n_secs)){
+            if(!args[1] || !parse_seconds(args[1], &n_secs) || n_secs <= 0){
                 puts("please provide an interval in seconds, minutes, hours, or days");
                 break;
             }
-
-            if(n_secs < 0)n_secs *= -1;
-            if(!n_secs)n_secs = 60*30;
 
             if(args[2]){
                 min_occurences = atoi(args[2]);
