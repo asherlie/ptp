@@ -170,39 +170,11 @@ _Bool parse_maddr(char* mstr, uint8_t mac[6]){
                    mac, mac+1, mac+2, mac+3, mac+4, mac+5) == 6;
 }
 
-#if 0
-TODO: decide which implementation to use - which is faster?
-_Bool parse_seconds(char* str, int* ret){
-	char* endptr = NULL;
-	int conv = strtol(str, &endptr, 10);
-
-	if(endptr == str)return 0;
-	
-	switch(*endptr){
-		case 'd': 
-		case 'D': 
-			conv *= (60*60*24);
-			break;
-		case 'm':
-		case 'M':
-			conv *= (60);
-			break;
-		case 'h':
-		case 'H':
-			conv *= (60*60);
-			break;
-		default:
-			break;
-	}
-	if(ret)*ret = conv;
-	return 1;
-}
-#endif
 _Bool parse_seconds(char* str, int* ret){
 	char* endptr = NULL, lowend;
 	double conv = strtod(str, &endptr);
 
-	int map[10] = {86400, 1, 1, 1, 60*60, 1, 1, 1, 1, 60};
+	int map[10] = {86400, 1, 1, 1, 3600, 1, 1, 1, 1, 60};
 
 	if(endptr == str)return 0;
 
