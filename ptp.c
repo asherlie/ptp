@@ -18,7 +18,7 @@
 #include "mq.h"
 #include "csv.h"
 
-#define PTP_VER_STR "0.9.1"
+#define PTP_VER_STR "0.9.2"
 
 /* used to ensure a safe exit so that
  * offload files aren't corrupted
@@ -170,6 +170,49 @@ _Bool parse_maddr(char* mstr, uint8_t mac[6]){
                    mac, mac+1, mac+2, mac+3, mac+4, mac+5) == 6;
 }
 
+#if 0
+TODO: decide which implementation to use - which is faster?
+_Bool parse_seconds(char* str, int* ret){
+	char* endptr = NULL;
+	int conv = strtol(str, &endptr, 10);
+
+	if(endptr == str)return 0;
+	
+	switch(*endptr){
+		case 'd': 
+		case 'D': 
+			conv *= (60*60*24);
+			break;
+		case 'm':
+		case 'M':
+			conv *= (60);
+			break;
+		case 'h':
+		case 'H':
+			conv *= (60*60);
+			break;
+		default:
+			break;
+	}
+	if(ret)*ret = conv;
+	return 1;
+}
+#endif
+_Bool parse_seconds(char* str, int* ret){
+	char* endptr = NULL, lowend;
+	int conv = strtol(str, &endptr, 10);
+
+	int map[10] = {86400, 1, 1, 1, 60*60, 1, 1, 1, 1, 60};
+
+	if(endptr == str)return 0;
+
+	lowend = tolower(*endptr);
+	if(lowend >= 'd' && lowend <= 'm')conv *= (map[lowend-'d']);
+	
+	if(ret)*ret = conv;
+	return 1;
+}
+
 void handle_command(char* cmd, struct probe_history* ph){
     char* args[200] = {0};
     char* sp = cmd, * prev = cmd;
@@ -181,6 +224,7 @@ void handle_command(char* cmd, struct probe_history* ph){
         prev = ++sp;
     }
     args[n_args++] = prev;
+
 
     switch(*cmd){
         #if 0
@@ -291,6 +335,9 @@ void handle_command(char* cmd, struct probe_history* ph){
         case 'r':
             p_mac_stack(ph, RECENTLY_RECVD, args[1] ? atoi(args[1]) : 1);
             break;
+        case 'q':{
+            }
+            break;
         case 'z':
             p_mac_stack(ph, NEW_ADDRS, args[1] ? atoi(args[1]) : 1);
             break;
@@ -313,12 +360,12 @@ void handle_command(char* cmd, struct probe_history* ph){
             int n_secs = 0, min_occurences = 0;
             FILE* fp;
 
-            if(!args[1]){
-                puts("please provide an interval in minutes");
+            if(!args[1] || !parse_seconds(args[1], &n_secs)){
+                puts("please provide an interval in seconds, minutes, hours, or days");
                 break;
             }
 
-            n_secs = 60*atoi(args[1]);
+            if(n_secs < 0)n_secs *= -1;
             if(!n_secs)n_secs = 60*30;
 
             if(args[2]){

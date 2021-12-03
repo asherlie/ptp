@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -Wall -Wshadow -Wformat=2 -fno-common -Wextra -Wpedantic -Werror -pthread -DREADLINE -lreadline -lpcap -g
+CFLAGS= -Wall -Wshadow -Wformat=2 -fno-common -Wextra -Wpedantic -Werror -pthread -DREADLINE -lreadline -lpcap -g3
 
 all: ptp 
 
