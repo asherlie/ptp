@@ -400,6 +400,11 @@ void handle_command(char* cmd, struct probe_history* ph){
             break;
         /* [t]rack */
         // TODO: make safe
+        // as of now, [t] provides all necessary functionality
+        // t * -1 will disable all tracking
+        // t * n will re-enable it 
+        // the issue is that we can't set each to a specific value and
+        // re-enable to that same value unless we use the global alerts_enabled
         case 't':{
             int n_secs = 0;
             if(!args[1]){
@@ -411,8 +416,7 @@ void handle_command(char* cmd, struct probe_history* ph){
                 *i = toupper(*i);
 
             if(args[2])parse_seconds(args[2], &n_secs);
-            printf("setting alert to %i\n", n_secs);
-            printf("updated alert threshold for %i addresses\n", set_alert_thresholds(ph, args[1], n_secs));
+            printf("updated alert threshold for %i addresses to %i\n", set_alert_thresholds(ph, args[1], n_secs), n_secs);
             break;
         }
         /*
