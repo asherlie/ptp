@@ -7,6 +7,7 @@
 #include <ctype.h>
 
 #include "mac_log.h"
+#include "kmq.h"
 #include "persist.h"
 
 void init_mac_stack(struct mac_stack* ms, int n_most_recent){
@@ -61,6 +62,8 @@ void init_probe_history(struct probe_history* ph, char* fn){
     pthread_mutex_init(&ph->file_storage_lock, NULL);
     ph->unique_addresses = 0;
     ph->total_probes = 0;
+    ph->mq_key = -1;
+    ph->alerts_enabled = 1;
     for(int i = 0; i < (0xff*6)+1; ++i){
         ph->buckets[i] = NULL;
     }
@@ -69,6 +72,10 @@ void init_probe_history(struct probe_history* ph, char* fn){
 
     ph->offload_fn = fn;
     if(fn){
+        /* TODO: this value should be dynamically adjusted
+         * to match the number of offloads per minute
+         * too many and this will be a huge bottleneck
+         */
         ph->offload_after = 1;
     }
 }
@@ -93,6 +100,7 @@ struct mac_addr* alloc_mac_addr_bucket(uint8_t mac_addr[6]){
     struct mac_addr* new_entry = malloc(sizeof(struct mac_addr));
  
     memcpy(new_entry->addr, mac_addr, 6);
+    new_entry->alert_threshold = -1;
     new_entry->mac_stack_idx[0] = -1;
     new_entry->mac_stack_idx[1] = -1;
     new_entry->next = NULL;
@@ -170,6 +178,10 @@ _Bool  _insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char
      * and insert a new probe request timestamp
      */
 
+    /*
+     * TODO: i need two more mac stacks, one that just keeps track of new ssids, one that keeps track of new ssids AND new addresses
+     * this will help me identify wholly new people as they appear
+    */
     if(!ready_bucket->probes){
         ready_bucket->probes = malloc(sizeof(struct probe_storage));
         init_probe_storage(ready_bucket->probes, ssid);
@@ -200,7 +212,12 @@ _Bool  _insert_probe_request(struct probe_history* ph, uint8_t mac_addr[6], char
 
     /* at this point, ps will contain the appropriate probe list */
 
-    ph->total_probes += insert_probe(ps, timestamp);
+    if(insert_probe(ps, timestamp)){
+        if(alert_eligible(ph, ready_bucket)){
+            add_alert(ph, ready_bucket);
+        }
+        ++ph->total_probes;
+    }
 
     /* would be very bad form to offload during a [l]oad command
      * ESPECIALLY if -o and -i values are identical

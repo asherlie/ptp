@@ -62,6 +62,8 @@ struct mac_addr{
     char* notes;
     struct probe_storage* probes;
 
+    int alert_threshold;
+
     int mac_stack_idx[2];
 
     struct mac_addr* next;
@@ -88,6 +90,9 @@ struct probe_history{
 
     int offload_after;
     char* offload_fn;
+
+    _Bool alerts_enabled;
+    key_t mq_key;
 };
 
 void init_probe_history(struct probe_history* ph, char* fn);
