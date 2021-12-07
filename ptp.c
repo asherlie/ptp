@@ -13,6 +13,7 @@
 #include <readline/history.h>
 #endif
 
+#include "kmq.h"
 #include "mac_log.h"
 #include "persist.h"
 #include "mq.h"
@@ -181,7 +182,10 @@ _Bool parse_seconds(char* str, int* ret){
 	lowend = tolower(*endptr);
 	if(lowend >= 'd' && lowend <= 'm')conv *= (map[lowend-'d']);
 	
-	if(ret)*ret = (int)(conv+.5);
+	if(ret){
+        conv += (conv >= 0) ? .5 : -.5;
+        *ret = (int)conv;
+    }
 	return 1;
 }
 
@@ -394,6 +398,36 @@ void handle_command(char* cmd, struct probe_history* ph){
             }
             p_probes(ph, args[2], args[1], NULL, NULL);
             break;
+        /* [t]rack */
+        // TODO: make safe
+        case 't':{
+            int n_secs = 0;
+            if(!args[1]){
+                puts("please enter a valid note filter");
+                break;
+            }
+
+            for(char* i = args[1]; *i; ++i)
+                *i = toupper(*i);
+
+            if(args[2])parse_seconds(args[2], &n_secs);
+            printf("setting alert to %i\n", n_secs);
+            printf("updated alert threshold for %i addresses\n", set_alert_thresholds(ph, args[1], n_secs));
+            break;
+        }
+        /*
+         * i still need a toggle command to broadly enable and one to disable alerts
+         * i need commands to print the list of alerts enabled
+         * think about the [t] and [k] commands - how could they be improved?
+        */
+        /* key_print */
+        case 'k':
+            /* when called without a filter, set_alert_thresholds()
+             * just ensures that a key is set
+             */
+            set_alert_thresholds(ph, NULL, 0);
+            printf("alert tag: %i\n", ph->mq_key);
+            break;
         /* [u]nique_xport_csv */
         /* [e]xport_csv */
         case 'u':
@@ -509,8 +543,8 @@ void wait_to_exit(int sig){
     return;
 }
 
-_Bool parse_args(int a, char** b, char** in_fn, char** out_fn){
-    _Bool set_in = 0, set_out = 0, version = 0;
+_Bool parse_args(int a, char** b, char** in_fn, char** out_fn, key_t* key){
+    _Bool set_in = 0, set_out = 0, set_key = 0, version = 0;
 
     for(int i = 1; i < a; ++i){
         if(set_in){
@@ -520,6 +554,10 @@ _Bool parse_args(int a, char** b, char** in_fn, char** out_fn){
         if(set_out){
             *out_fn = b[i];
             set_out = 0;
+        }
+        if(set_key){
+            *key = atoi(b[i]);
+            set_key = 0;
         }
         else if(*b[i] == '-'){
             switch(b[i][1]){
@@ -534,6 +572,10 @@ _Bool parse_args(int a, char** b, char** in_fn, char** out_fn){
                 case 'O':
                 case 'o':
                     set_out = 1;
+                    break;
+                case 'K':
+                case 'k':
+                    set_key = 1;
                     break;
             }
         }
@@ -553,15 +595,17 @@ int main(int a, char** b){
     struct mqueue mq;
     struct probe_history ph;
     struct mq_ph_pair mqph = {.mq = &mq, .ph = &ph};
+    key_t startup_key = -1;
     char* init_fn = NULL, * offload_fn = NULL;
 
-    if(parse_args(a, b, &init_fn, &offload_fn)){
+    if(parse_args(a, b, &init_fn, &offload_fn, &startup_key)){
         p_info();
         return EXIT_SUCCESS;
     }
 
     init_mq(&mq);
     init_probe_history(&ph, offload_fn);
+    ph.mq_key = startup_key;
 
     __ph = &ph;
 
