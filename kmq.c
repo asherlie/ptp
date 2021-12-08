@@ -53,14 +53,14 @@ int set_alert_thresholds(struct probe_history* ph, char* filter, int threshold){
     return ret;
 }
 
-int p_alert_thresholds(struct probe_history* ph, _Bool show_unset){
+int p_alert_thresholds(struct probe_history* ph, char* filter, _Bool show_unset){
     int cnt = 0;
     struct mac_addr* ma;
     pthread_mutex_lock(&ph->lock);
     for(int i = 0; i < (0xff*6)+1; ++i){
         if((ma = ph->buckets[i])){
             for(; ma; ma = ma->next){
-                if(!ma->notes || (!show_unset && ma->alert_threshold < 0))continue;
+                if(!ma->notes || (filter && !strstr(ma->notes, filter)) || (!show_unset && ma->alert_threshold < 0))continue;
                 ++cnt;
                 printf("  %i: %s\n", ma->alert_threshold, ma->notes);
             }

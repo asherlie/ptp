@@ -19,7 +19,7 @@
 #include "mq.h"
 #include "csv.h"
 
-#define PTP_VER_STR "0.9.2"
+#define PTP_VER_STR "0.9.3"
 
 /* used to ensure a safe exit so that
  * offload files aren't corrupted
@@ -405,17 +405,21 @@ void handle_command(char* cmd, struct probe_history* ph){
         // the issue is that we can't set each to a specific value and
         // re-enable to that same value unless we use the global alerts_enabled
         case 't':{
-            int n_secs = 0;
+            int n_secs;
             if(!args[1]){
                 puts("current alert thresholds:");
-                printf("alerts enabled for %i users\n", p_alert_thresholds(ph, 0));
+                printf("alerts enabled for %i users\n", p_alert_thresholds(ph, NULL, 0));
                 break;
             }
 
             for(char* i = args[1]; *i; ++i)
                 *i = toupper(*i);
 
-            if(args[2])parse_seconds(args[2], &n_secs);
+            if(!args[2] || !parse_seconds(args[2], &n_secs)){
+                p_alert_thresholds(ph, args[1], 1);
+                break;
+            }
+
             printf("updated alert threshold for %i addresses to %i\n", set_alert_thresholds(ph, args[1], n_secs), n_secs);
             break;
         }
