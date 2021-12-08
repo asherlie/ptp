@@ -408,7 +408,7 @@ void handle_command(char* cmd, struct probe_history* ph){
             int n_secs = 0;
             if(!args[1]){
                 puts("current alert thresholds:");
-                p_alert_thresholds(ph, 1);
+                printf("alerts enabled for %i users\n", p_alert_thresholds(ph, 0));
                 break;
             }
 
