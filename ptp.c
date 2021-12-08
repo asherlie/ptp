@@ -399,7 +399,6 @@ void handle_command(char* cmd, struct probe_history* ph){
             p_probes(ph, args[2], args[1], NULL, NULL);
             break;
         /* [t]rack */
-        // TODO: make safe
         // as of now, [t] provides all necessary functionality
         // t * -1 will disable all tracking
         // t * n will re-enable it 
@@ -408,7 +407,8 @@ void handle_command(char* cmd, struct probe_history* ph){
         case 't':{
             int n_secs = 0;
             if(!args[1]){
-                puts("please enter a valid note filter");
+                puts("current alert thresholds:");
+                p_alert_thresholds(ph, 1);
                 break;
             }
 

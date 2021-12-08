@@ -43,7 +43,7 @@ int set_alert_thresholds(struct probe_history* ph, char* filter, int threshold){
                 for(; ma; ma = ma->next){
                     if(!ma->notes || (*filter != '*' && !strstr(ma->notes, filter)))continue;
                     ++ret;
-                    printf("%s\n", ma->notes);
+                    printf("%i -> %i: %s\n", ma->alert_threshold, threshold, ma->notes);
                     ma->alert_threshold = threshold;
                 }
             }
@@ -51,6 +51,20 @@ int set_alert_thresholds(struct probe_history* ph, char* filter, int threshold){
     }
     pthread_mutex_unlock(&ph->lock);
     return ret;
+}
+
+void p_alert_thresholds(struct probe_history* ph, _Bool show_unset){
+    struct mac_addr* ma;
+    pthread_mutex_lock(&ph->lock);
+    for(int i = 0; i < (0xff*6)+1; ++i){
+        if((ma = ph->buckets[i])){
+            for(; ma; ma = ma->next){
+                if(!ma->notes || (!show_unset && ma->alert_threshold < 0))continue;
+                printf("  %i: %s\n", ma->alert_threshold, ma->notes);
+            }
+        }
+    }
+    pthread_mutex_unlock(&ph->lock);
 }
 
 /* set_alert_thresholds() must have been called at least once before this is called */
