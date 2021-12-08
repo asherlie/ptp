@@ -27,11 +27,11 @@ _Bool alert_eligible(struct probe_history* ph, struct mac_addr* ma){
            (ma->probes->probe_times[ma->probes->n_probes-1] - ma->probes->probe_times[ma->probes->n_probes-2] > ma->alert_threshold);
 }
 
-int set_alert_thresholds(struct probe_history* ph, char* filter, int threshold){
+int set_alert_thresholds(struct probe_history* ph, char* filter, int threshold, _Bool lock){
     struct mac_addr* ma;
     int ret = 0;
 
-    pthread_mutex_lock(&ph->lock);
+    if(lock)pthread_mutex_lock(&ph->lock);
     if(ph->mq_key == -1){
         srand(time(NULL));
         ph->mq_key = random();
@@ -42,14 +42,14 @@ int set_alert_thresholds(struct probe_history* ph, char* filter, int threshold){
             if((ma = ph->buckets[i])){
                 for(; ma; ma = ma->next){
                     if(!ma->notes || (*filter != '*' && !strstr(ma->notes, filter)))continue;
-                    ++ret;
+                    ret += ma->alert_threshold != threshold;
                     printf("%i -> %i: %s\n", ma->alert_threshold, threshold, ma->notes);
                     ma->alert_threshold = threshold;
                 }
             }
         }
     }
-    pthread_mutex_unlock(&ph->lock);
+    if(lock)pthread_mutex_unlock(&ph->lock);
     return ret;
 }
 

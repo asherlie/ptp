@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "kmq.h"
 #include "persist.h"
 #include "mac_log.h"
 
@@ -101,7 +102,10 @@ _Bool dump_probe_history(struct probe_history* ph, char* fn){
                 /* deal with struct mac_addr */
                 fwrite(ma->addr, 1, 6, fp);
                 fwrite(&notelen, sizeof(int), 1, fp);
-                if(ma->notes)fwrite(ma->notes, 1, notelen, fp);
+                if(ma->notes){
+                    fwrite(ma->notes, 1, notelen, fp);
+                    fwrite(&ma->alert_threshold, sizeof(int), 1, fp);
+                }
                 /* deal with probes */
                 ps_len = 0;
                 for(struct probe_storage* ps = ma->probes; ps; ps = ps->next){
@@ -140,13 +144,14 @@ int _load_probe_history(struct probe_history* ph, char* fn){
     FILE* fp;
     uint8_t addr[6];
     char ssid[32], * note;
-    int notelen, ps_len, n_probes, probes_removed = 0;
+    int notelen, alert_thresh, ps_len, n_probes, probes_removed = 0;
     int64_t probe_time, current = time(NULL);
     struct probe_storage* ps;
+    struct mac_addr* ma;
     int n_inserted = 0;
     int fingerprint = 0;
     int n_corrupted = 0;
-    _Bool failure = 0;
+    _Bool failure = 0, alerts_enabled = 0;
 
     pthread_mutex_lock(&ph->lock);
     pthread_mutex_lock(&ph->file_storage_lock);
@@ -172,6 +177,8 @@ int _load_probe_history(struct probe_history* ph, char* fn){
             note[notelen] = 0;
             if((int)fread(note, 1, notelen, fp) != notelen)
                 goto EXIT;
+            if(fread(&alert_thresh, sizeof(int), 1, fp) != 1)
+                goto EXIT;
         }
         if(fread(&ps_len, sizeof(int), 1, fp) != 1)
             goto EXIT;
@@ -196,7 +203,7 @@ int _load_probe_history(struct probe_history* ph, char* fn){
                 /* ps is used for sorting after all probes have been inserted
                  * ps pointer should be identical with each iteration
                  */
-                insert_probe_request_nolock(ph, addr, ssid, probe_time, 1, NULL, &ps);
+                insert_probe_request_nolock(ph, addr, ssid, probe_time, 1, &ma, &ps);
                 ++n_inserted;
             }
             /* after reading all probes for a given mac/ssid pair,
@@ -220,12 +227,20 @@ int _load_probe_history(struct probe_history* ph, char* fn){
             }
         }
         /* done after our iteration to ensure that fields exist */
-        if(notelen)add_note_nolock(ph, addr, note);
+        if(notelen){
+            add_note_nolock(ph, addr, note);
+            alerts_enabled |= ((ma->alert_threshold = alert_thresh) >= 0);
+        }
     }
     EXIT:
     if(fp)fclose(fp);
     /* subtract probes_removed to keep ph->total_probes accurate */
     ph->total_probes -= probes_removed;
+
+    /* if >= 1 alert is found to be enabled, ensure that our queue
+     * is created if it needs to be
+     */
+    if(alerts_enabled)set_alert_thresholds(ph, NULL, -1, 0);
 
     pthread_mutex_unlock(&ph->lock);
     pthread_mutex_unlock(&ph->file_storage_lock);

@@ -405,7 +405,7 @@ void handle_command(char* cmd, struct probe_history* ph){
         // the issue is that we can't set each to a specific value and
         // re-enable to that same value unless we use the global alerts_enabled
         case 't':{
-            int n_secs;
+            int n_secs, n_updated;
             if(!args[1]){
                 puts("current alert thresholds:");
                 printf("alerts enabled for %i users\n", p_alert_thresholds(ph, NULL, 0));
@@ -420,7 +420,9 @@ void handle_command(char* cmd, struct probe_history* ph){
                 break;
             }
 
-            printf("updated alert threshold for %i addresses to %i\n", set_alert_thresholds(ph, args[1], n_secs), n_secs);
+            n_updated = set_alert_thresholds(ph, args[1], n_secs, 1);
+            printf("updated alert threshold for %i addresses to %i\n", n_updated, n_secs);
+            if(ph->offload_fn && n_updated)dump_probe_history(ph, ph->offload_fn);
             break;
         }
         /*
@@ -433,7 +435,7 @@ void handle_command(char* cmd, struct probe_history* ph){
             /* when called without a filter, set_alert_thresholds()
              * just ensures that a key is set
              */
-            set_alert_thresholds(ph, NULL, 0);
+            set_alert_thresholds(ph, NULL, 0, 1);
             printf("alert tag: %i\n", ph->mq_key);
             break;
         /* [u]nique_xport_csv */
